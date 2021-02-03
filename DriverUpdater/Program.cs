@@ -25,6 +25,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 
 namespace DriverUpdater
@@ -33,6 +34,14 @@ namespace DriverUpdater
     {
         static void Main(string[] args)
         {
+            Logging.Log($"DriverUpdater {Assembly.GetExecutingAssembly().GetName().Version} - Cleans and Installs a new set of drivers onto a Windows Image");
+            Logging.Log("Copyright (c) 2017-2021, The LumiaWOA Authors");
+            Logging.Log("https://github.com/WOA-Project/DriverUpdater");
+            Logging.Log("");
+            Logging.Log("This program comes with ABSOLUTELY NO WARRANTY.");
+            Logging.Log("This is free software, and you are welcome to redistribute it under certain conditions.");
+            Logging.Log("");
+
             if (args.Count() < 3)
             {
                 Logging.Log("Usage: DriverUpdater <Path to definition> <Path to Driver repository> <Path to Device partition>");
@@ -42,16 +51,21 @@ namespace DriverUpdater
             string Definition = args[0];
             string DriverRepo = args[1];
             string DevicePart = args[2];
+            bool IntegratePostUpgrade = args.Count() == 3;
 
             if (!File.Exists(Definition) || !Directory.Exists(DriverRepo) || !Directory.Exists(DevicePart))
             {
+                Logging.Log("The tool detected one of the provided paths does not exist. Recheck your parameters and try again.", Logging.LoggingLevel.Error);
                 Logging.Log("Usage: DriverUpdater <Path to definition> <Path to Driver repository> <Path to Device partition>");
                 return;
             }
 
+            if (IntegratePostUpgrade)
+                Logging.Log("Not going to perform upgrade enablement.", Logging.LoggingLevel.Warning);
+
             try
             {
-                Install(Definition, DriverRepo, DevicePart);
+                Install(Definition, DriverRepo, DevicePart, IntegratePostUpgrade);
             }
             catch (Exception ex)
             {
@@ -64,35 +78,32 @@ namespace DriverUpdater
 
         static bool ResealForPnPFirstBootUx(string DevicePart)
         {
-            try
+            using var hive = new DiscUtils.Registry.RegistryHive(File.Open(Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM"), FileMode.Open, FileAccess.ReadWrite), DiscUtils.Streams.Ownership.Dispose);
+            var hwconf = hive.Root.OpenSubKey("HardwareConfig");
+            if (hwconf != null)
             {
-                using var hive = new DiscUtils.Registry.RegistryHive(File.Open(Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM"), FileMode.Open, FileAccess.ReadWrite), DiscUtils.Streams.Ownership.Dispose);
-                var hwconf = hive.Root.OpenSubKey("HardwareConfig");
-                if (hwconf != null)
-                {
-                    Logging.Log("Resealing image to PnP FirstBootUx...");
-                    foreach (var subkey in hwconf.GetSubKeyNames())
-                        hwconf.DeleteSubKeyTree(subkey);
-                    foreach (var subval in hwconf.GetValueNames())
-                        hwconf.DeleteValue(subval);
+                Logging.Log("Resealing image to PnP FirstBootUx...");
+                foreach (var subkey in hwconf.GetSubKeyNames())
+                    hwconf.DeleteSubKeyTree(subkey);
+                foreach (var subval in hwconf.GetValueNames())
+                    hwconf.DeleteValue(subval);
 
-                    return true;
-                }
+                return true;
             }
-            catch { }
 
             return false;
         }
 
-        static void Install(string Definition, string DriverRepo, string DevicePart)
+        static void Install(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade)
         {
             Logging.Log("Reading definition file...");
+
             string[] definitionPaths = File.ReadAllLines(Definition).Where(x => !string.IsNullOrEmpty(x)).ToArray();
 
-            //if (ResealForPnPFirstBootUx(DevicePart))
+            if (IntegratePostUpgrade)
             {
-                definitionPaths = File.ReadAllLines(Definition).Where(x => !string.IsNullOrEmpty(x))
-                    .Union(new string[] { "components\\ANYSOC\\SUPPORT.DESKTOP.POST_UPGRADE_ENABLEMENT" }).ToArray();
+                ResealForPnPFirstBootUx(DevicePart);
+                definitionPaths = definitionPaths.Union(new string[] { "components\\ANYSOC\\SUPPORT.DESKTOP.POST_UPGRADE_ENABLEMENT" }).ToArray();
             }
 
             Logging.Log("Enumerating existing drivers...");
@@ -101,8 +112,8 @@ namespace DriverUpdater
 
             var ntStatus = NativeMethods.DriverStoreOfflineEnumDriverPackageW(
                 (
-                    string DriverPackageInfPath, 
-                    NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW DriverStoreOfflineEnumDriverPackageInfoW, 
+                    string DriverPackageInfPath,
+                    NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW DriverStoreOfflineEnumDriverPackageInfoW,
                     IntPtr Unknown
                 ) =>
                 {
