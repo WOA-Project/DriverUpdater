@@ -26,6 +26,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace DriverUpdater
@@ -113,10 +114,12 @@ namespace DriverUpdater
             var ntStatus = NativeMethods.DriverStoreOfflineEnumDriverPackageW(
                 (
                     string DriverPackageInfPath,
-                    NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW DriverStoreOfflineEnumDriverPackageInfoW,
+                    IntPtr Ptr,
                     IntPtr Unknown
                 ) =>
                 {
+                    NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW DriverStoreOfflineEnumDriverPackageInfoW =
+                        (NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW)Marshal.PtrToStructure(Ptr, typeof(NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW));
                     Console.Title = $"Driver Updater - DriverStoreOfflineEnumDriverPackageW - {DriverPackageInfPath}";
                     if (DriverStoreOfflineEnumDriverPackageInfoW.InboxInf == 0)
                         existingDrivers.Add(DriverPackageInfPath);

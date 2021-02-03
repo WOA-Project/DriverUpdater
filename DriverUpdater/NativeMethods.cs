@@ -66,7 +66,7 @@ namespace DriverUpdater
         public delegate uint CallbackRoutine(
             [MarshalAs(UnmanagedType.LPWStr)]
             string DriverPackageInfPath,
-            DriverStoreOfflineEnumDriverPackageInfoW DriverStoreOfflineEnumDriverPackageInfoW, 
+            IntPtr DriverStoreOfflineEnumDriverPackageInfoW, 
             IntPtr Unknown);
 
         [DllImport("drvstore.dll", EntryPoint = "DriverStoreOfflineEnumDriverPackageW", SetLastError = true, CharSet = CharSet.Unicode)]
