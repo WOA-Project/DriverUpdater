@@ -60,7 +60,7 @@ namespace DriverUpdater
                 return;
             }
 
-            if (IntegratePostUpgrade)
+            if (!IntegratePostUpgrade)
                 Logging.Log("Not going to perform upgrade enablement.", Logging.LoggingLevel.Warning);
 
             try
