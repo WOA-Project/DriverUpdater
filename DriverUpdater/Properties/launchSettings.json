@@ -2,7 +2,8 @@
   "profiles": {
     "DriverUpdater": {
       "commandName": "Project",
-      "commandLineArgs": "C:\\Users\\Gus\\Source\\Repos\\WOA-Project\\Lumia-Drivers\\definitions\\950xl.txt C:\\Users\\Gus\\Source\\Repos\\WOA-Project\\Lumia-Drivers\\ F:\\"
+      "commandLineArgs": "C:\\Users\\Gus\\Source\\Repos\\WOA-Project\\Lumia-Drivers\\definitions\\950xl.txt C:\\Users\\Gus\\Source\\Repos\\WOA-Project\\Lumia-Drivers\\ F:\\",
+      "nativeDebugging": true
     }
   }
 }
