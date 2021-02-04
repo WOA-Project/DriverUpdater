@@ -174,7 +174,23 @@ namespace DriverUpdater
 
                     Console.Title = $"Driver Updater - DriverStoreOfflineAddDriverPackageW - {inf}";
                     Logging.ShowProgress(Progress++, infs.Count(), startTime, false);
-                    ntStatus = NativeMethods.DriverStoreOfflineAddDriverPackageW(inf, 0x00000020 | 0x00000080 | 0x00000100, IntPtr.Zero, 12, "en-US", destinationPath, ref destinationPathLength, $"{DevicePart}\\Windows", DevicePart);
+
+                    int maxAttempts = 3;
+                    int currentFails = 0;
+
+                    while (currentFails < maxAttempts)
+                    {
+                        ntStatus = NativeMethods.DriverStoreOfflineAddDriverPackageW(inf, 0x00000020 | 0x00000080 | 0x00000100, IntPtr.Zero, 12, "en-US", destinationPath, ref destinationPathLength, $"{DevicePart}\\Windows", DevicePart);
+
+                        /* 
+                           Invalid ARG can be thrown when an issue happens with a specific driver inf
+                           No investigation done yet, but for now, this will do just fine
+                        */
+                        if (ntStatus == 0x80070057)
+                            currentFails++;
+                        else
+                            break;
+                    }
 
                     if (ntStatus != 0)
                     {
