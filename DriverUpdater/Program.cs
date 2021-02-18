@@ -138,16 +138,39 @@ namespace DriverUpdater
             long Progress = 0;
             DateTime startTime = DateTime.Now;
 
-            foreach (var driver in existingDrivers)
+            IntPtr hDriverStore = NativeMethods.DriverStoreOpenW($"{DevicePart}\\Windows", DevicePart, 0, IntPtr.Zero);
+            if (hDriverStore == IntPtr.Zero)
             {
-                Console.Title = $"Driver Updater - DriverStoreOfflineDeleteDriverPackageW - {driver}";
-                Logging.ShowProgress(Progress++, existingDrivers.Count, startTime, false);
-                ntStatus = NativeMethods.DriverStoreOfflineDeleteDriverPackageW(driver, 0, IntPtr.Zero, $"{DevicePart}\\Windows", DevicePart);
-
                 if (ntStatus != 0)
                 {
                     Logging.Log("");
-                    Logging.Log($"DriverStoreOfflineDeleteDriverPackageW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                    Logging.Log($"DriverStoreOpenW: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
+                    return;
+                }
+            }
+
+            foreach (var driver in existingDrivers)
+            {
+                Console.Title = $"Driver Updater - DriverStoreUnreflectCriticalW - {driver}";
+                Logging.ShowProgress(Progress++, existingDrivers.Count, startTime, false);
+                ntStatus = NativeMethods.DriverStoreUnreflectCriticalW(hDriverStore, driver, 0, null);
+                if (ntStatus != 0)
+                {
+                    Logging.Log("");
+                    Logging.Log($"DriverStoreUnreflectCriticalW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                    NativeMethods.DriverStoreClose(hDriverStore);
+
+                    return;
+                }
+
+                Console.Title = $"Driver Updater - DriverStoreDeleteW - {driver}";
+                ntStatus = NativeMethods.DriverStoreDeleteW(hDriverStore, driver, 0);
+                if (ntStatus != 0)
+                {
+                    Logging.Log("");
+                    Logging.Log($"DriverStoreDeleteW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                    NativeMethods.DriverStoreClose(hDriverStore);
+
                     return;
                 }
             }
@@ -180,7 +203,7 @@ namespace DriverUpdater
 
                     while (currentFails < maxAttempts)
                     {
-                        ntStatus = NativeMethods.DriverStoreOfflineAddDriverPackageW(inf, 0x00000020 | 0x00000080 | 0x00000100, IntPtr.Zero, 12, "en-US", destinationPath, ref destinationPathLength, $"{DevicePart}\\Windows", DevicePart);
+                        ntStatus = NativeMethods.DriverStoreImportW(hDriverStore, inf, NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-us", 0x20 | 0x2000, destinationPath, ref destinationPathLength);
 
                         /* 
                            Invalid ARG can be thrown when an issue happens with a specific driver inf
@@ -195,13 +218,43 @@ namespace DriverUpdater
                     if (ntStatus != 0)
                     {
                         Logging.Log("");
-                        Logging.Log($"DriverStoreOfflineAddDriverPackageW: ntStatus={ntStatus}, destinationPathLength={destinationPathLength}, destinationPath={destinationPath}", Logging.LoggingLevel.Error);
+                        Logging.Log($"DriverStoreImportW: ntStatus={ntStatus}, destinationPathLength={destinationPathLength}, destinationPath={destinationPath}", Logging.LoggingLevel.Error);
+                        NativeMethods.DriverStoreClose(hDriverStore);
+
+                        return;
+                    }
+
+                    maxAttempts = 3;
+                    currentFails = 0;
+
+                    while (currentFails < maxAttempts)
+                    {
+                        ntStatus = NativeMethods.DriverStoreReflectCriticalW(hDriverStore, destinationPath.ToString(), 0, null);
+
+                        /* 
+                           Invalid ARG can be thrown when an issue happens with a specific driver inf
+                           No investigation done yet, but for now, this will do just fine
+                        */
+                        if (ntStatus == 0x80070057)
+                            currentFails++;
+                        else
+                            break;
+                    }
+
+                    if (ntStatus != 0)
+                    {
+                        Logging.Log("");
+                        Logging.Log($"DriverStoreReflectCriticalW: ntStatus={ntStatus}, destinationPathLength={destinationPathLength}, destinationPath={destinationPath}", Logging.LoggingLevel.Error);
+                        NativeMethods.DriverStoreClose(hDriverStore);
+
                         return;
                     }
                 }
                 Logging.ShowProgress(infs.Count(), infs.Count(), startTime, false);
                 Logging.Log("");
             }
+
+            NativeMethods.DriverStoreClose(hDriverStore);
         }
     }
 }
