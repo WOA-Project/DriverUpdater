@@ -52,7 +52,27 @@ namespace DriverUpdater
             string Definition = args[0];
             string DriverRepo = args[1];
             string DevicePart = args[2];
-            bool IntegratePostUpgrade = args.Count() == 3;
+            bool IntegratePostUpgrade = true;
+            bool IsARM = false;
+
+            if (args.Count() > 3)
+            {
+                foreach (var arg in args.Skip(3))
+                {
+                    if (arg == "--NoIntegratePostUpgrade")
+                    {
+                        IntegratePostUpgrade = false;
+                    }
+                    else if (arg == "--ARM")
+                    {
+                        IsARM = true;
+                    }
+                    else
+                    {
+                        Logging.Log($"Ignored extra parameter: {arg}", Logging.LoggingLevel.Warning);
+                    }
+                }
+            }
 
             if (!File.Exists(Definition) || !Directory.Exists(DriverRepo) || !Directory.Exists(DevicePart))
             {
@@ -66,7 +86,7 @@ namespace DriverUpdater
 
             try
             {
-                Install(Definition, DriverRepo, DevicePart, IntegratePostUpgrade);
+                Install(Definition, DriverRepo, DevicePart, IntegratePostUpgrade, IsARM);
             }
             catch (Exception ex)
             {
@@ -95,23 +115,40 @@ namespace DriverUpdater
             return false;
         }
 
-        static void Install(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade)
+        static void Install(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, bool IsARM)
         {
             Logging.Log("Reading definition file...");
 
+            // This gets us the list of driver packages to install on the device
             string[] definitionPaths = File.ReadAllLines(Definition).Where(x => !string.IsNullOrEmpty(x)).ToArray();
 
+            // If we have to perform an upgrade operation, reseal the image
             if (IntegratePostUpgrade)
             {
-                ResealForPnPFirstBootUx(DevicePart);
+                IntegratePostUpgrade = ResealForPnPFirstBootUx(DevicePart);
+            }
+
+            // If we have to perform an upgrade operation, and the previous action succeeded, queue the post upgrade package
+            if (IntegratePostUpgrade)
+            {
                 definitionPaths = definitionPaths.Union(new string[] { "components\\ANYSOC\\SUPPORT.DESKTOP.POST_UPGRADE_ENABLEMENT" }).ToArray();
+            }
+
+            // Ensure everything exists
+            foreach (var path in definitionPaths)
+            {
+                if (!Directory.Exists($"{DriverRepo}\\{path}"))
+                {
+                    Logging.Log($"A component package was not found: {DriverRepo}\\{path}", Logging.LoggingLevel.Error);
+                    return;
+                }
             }
 
             Logging.Log("Enumerating existing drivers...");
 
             List<string> existingDrivers = new List<string>();
 
-            var ntStatus = NativeMethods.DriverStoreOfflineEnumDriverPackageW(
+            int ntStatus = NativeMethods.DriverStoreOfflineEnumDriverPackageW(
                 (
                     string DriverPackageInfPath,
                     IntPtr Ptr,
@@ -127,7 +164,7 @@ namespace DriverUpdater
                 }
             , IntPtr.Zero, $"{DevicePart}\\Windows");
 
-            if (ntStatus != 0)
+            if (ntStatus < 0)
             {
                 Logging.Log($"DriverStoreOfflineEnumDriverPackageW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
                 return;
@@ -141,7 +178,7 @@ namespace DriverUpdater
             IntPtr hDriverStore = NativeMethods.DriverStoreOpenW($"{DevicePart}\\Windows", DevicePart, 0, IntPtr.Zero);
             if (hDriverStore == IntPtr.Zero)
             {
-                if (ntStatus != 0)
+                if (ntStatus < 0)
                 {
                     Logging.Log("");
                     Logging.Log($"DriverStoreOpenW: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
@@ -151,10 +188,11 @@ namespace DriverUpdater
 
             foreach (var driver in existingDrivers)
             {
+                // Unreflect the modifications done by the driver package first on the target windows image
                 Console.Title = $"Driver Updater - DriverStoreUnreflectCriticalW - {driver}";
                 Logging.ShowProgress(Progress++, existingDrivers.Count, startTime, false);
                 ntStatus = NativeMethods.DriverStoreUnreflectCriticalW(hDriverStore, driver, 0, null);
-                if (ntStatus != 0)
+                if (ntStatus < 0)
                 {
                     Logging.Log("");
                     Logging.Log($"DriverStoreUnreflectCriticalW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
@@ -163,9 +201,10 @@ namespace DriverUpdater
                     return;
                 }
 
+                // And then remove the driver package from the target image
                 Console.Title = $"Driver Updater - DriverStoreDeleteW - {driver}";
                 ntStatus = NativeMethods.DriverStoreDeleteW(hDriverStore, driver, 0);
-                if (ntStatus != 0)
+                if (ntStatus < 0)
                 {
                     Logging.Log("");
                     Logging.Log($"DriverStoreDeleteW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
@@ -190,12 +229,14 @@ namespace DriverUpdater
                 Progress = 0;
                 startTime = DateTime.Now;
 
+                // Install every inf present in the component folder
                 foreach (var inf in infs)
                 {
                     var destinationPath = new StringBuilder(260);
                     int destinationPathLength = 260;
 
-                    Console.Title = $"Driver Updater - DriverStoreOfflineAddDriverPackageW - {inf}";
+                    // First add the driver package to the image
+                    Console.Title = $"Driver Updater - DriverStoreImportW - {inf}";
                     Logging.ShowProgress(Progress++, infs.Count(), startTime, false);
 
                     int maxAttempts = 3;
@@ -203,19 +244,19 @@ namespace DriverUpdater
 
                     while (currentFails < maxAttempts)
                     {
-                        ntStatus = NativeMethods.DriverStoreImportW(hDriverStore, inf, NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-us", 0x20 | 0x2000, destinationPath, ref destinationPathLength);
+                        ntStatus = NativeMethods.DriverStoreImportW(hDriverStore, inf, IsARM ? NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-us", 0x20 | 0x2000, destinationPath, ref destinationPathLength);
 
                         /* 
                            Invalid ARG can be thrown when an issue happens with a specific driver inf
                            No investigation done yet, but for now, this will do just fine
                         */
-                        if (ntStatus == 0x80070057)
+                        if (ntStatus == -2147024809)
                             currentFails++;
                         else
                             break;
                     }
 
-                    if (ntStatus != 0)
+                    if (ntStatus < 0)
                     {
                         Logging.Log("");
                         Logging.Log($"DriverStoreImportW: ntStatus={ntStatus}, destinationPathLength={destinationPathLength}, destinationPath={destinationPath}", Logging.LoggingLevel.Error);
@@ -224,6 +265,8 @@ namespace DriverUpdater
                         return;
                     }
 
+                    // And then reflect it into the target image
+                    Console.Title = $"Driver Updater - DriverStoreReflectCriticalW - {inf}";
                     maxAttempts = 3;
                     currentFails = 0;
 
@@ -235,13 +278,13 @@ namespace DriverUpdater
                            Invalid ARG can be thrown when an issue happens with a specific driver inf
                            No investigation done yet, but for now, this will do just fine
                         */
-                        if (ntStatus == 0x80070057)
+                        if (ntStatus == -2147024809)
                             currentFails++;
                         else
                             break;
                     }
 
-                    if (ntStatus != 0)
+                    if (ntStatus < 0)
                     {
                         Logging.Log("");
                         Logging.Log($"DriverStoreReflectCriticalW: ntStatus={ntStatus}, destinationPathLength={destinationPathLength}, destinationPath={destinationPath}", Logging.LoggingLevel.Error);
