@@ -23,6 +23,7 @@ SOFTWARE.
 */
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -86,7 +87,7 @@ namespace DriverUpdater
 
             try
             {
-                Install(Definition, DriverRepo, DevicePart, IntegratePostUpgrade, IsARM);
+                InstallSafe(Definition, DriverRepo, DevicePart, IntegratePostUpgrade, IsARM);
             }
             catch (Exception ex)
             {
@@ -97,9 +98,10 @@ namespace DriverUpdater
             Logging.Log("Done!");
         }
 
-        static bool ResealForPnPFirstBootUx(string DevicePart)
+        private static bool ResealForPnPFirstBootUxInternal(string DevicePart)
         {
-            using var hive = new DiscUtils.Registry.RegistryHive(File.Open(Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM"), FileMode.Open, FileAccess.ReadWrite), DiscUtils.Streams.Ownership.Dispose);
+            using var file = File.Open(Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM"), FileMode.Open, FileAccess.ReadWrite);
+            using var hive = new DiscUtils.Registry.RegistryHive(file, DiscUtils.Streams.Ownership.Dispose);
             var hwconf = hive.Root.OpenSubKey("HardwareConfig");
             if (hwconf != null)
             {
@@ -113,6 +115,167 @@ namespace DriverUpdater
             }
 
             return false;
+        }
+
+        static bool ResealForPnPFirstBootUx(string DevicePart)
+        {
+            bool result = false;
+            try
+            {
+                result = ResealForPnPFirstBootUxInternal(DevicePart);
+            }
+            catch (NotImplementedException)
+            {
+                var proc = new Process();
+                proc.StartInfo = new ProcessStartInfo("reg.exe", $"load HKLM\\DriverUpdater {Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM")}");
+                proc.StartInfo.UseShellExecute = false;
+                proc.Start();
+                proc.WaitForExit();
+                if (proc.ExitCode != 0)
+                    throw new Exception("Couldn't load registry hive");
+
+                proc = new Process();
+                proc.StartInfo = new ProcessStartInfo("reg.exe", $"unload HKLM\\DriverUpdater");
+                proc.StartInfo.UseShellExecute = false;
+                proc.Start();
+                proc.WaitForExit();
+                if (proc.ExitCode != 0)
+                    throw new Exception("Couldn't unload registry hive");
+
+                result = ResealForPnPFirstBootUxInternal(DevicePart);
+            }
+
+            return result;
+        }
+
+        static void InstallSafe(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, bool IsARM)
+        {
+            Logging.Log("Reading definition file...");
+
+            // This gets us the list of driver packages to install on the device
+            string[] definitionPaths = File.ReadAllLines(Definition).Where(x => !string.IsNullOrEmpty(x)).ToArray();
+
+            // If we have to perform an upgrade operation, reseal the image
+            if (IntegratePostUpgrade)
+            {
+                IntegratePostUpgrade = ResealForPnPFirstBootUx(DevicePart);
+            }
+
+            // If we have to perform an upgrade operation, and the previous action succeeded, queue the post upgrade package
+            if (IntegratePostUpgrade)
+            {
+                definitionPaths = definitionPaths.Union(new string[] { @"components\ANYSOC\Support\Desktop\SUPPORT.DESKTOP.POST_UPGRADE_ENABLEMENT" }).ToArray();
+            }
+
+            // Ensure everything exists
+            foreach (var path in definitionPaths)
+            {
+                if (!Directory.Exists($"{DriverRepo}\\{path}"))
+                {
+                    Logging.Log($"A component package was not found: {DriverRepo}\\{path}", Logging.LoggingLevel.Error);
+                    return;
+                }
+            }
+
+            Logging.Log("Enumerating existing drivers...");
+
+            List<string> existingDrivers = new List<string>();
+
+            int ntStatus = NativeMethods.DriverStoreOfflineEnumDriverPackageW(
+                (
+                    string DriverPackageInfPath,
+                    IntPtr Ptr,
+                    IntPtr Unknown
+                ) =>
+                {
+                    NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW DriverStoreOfflineEnumDriverPackageInfoW =
+                        (NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW)Marshal.PtrToStructure(Ptr, typeof(NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW));
+                    Console.Title = $"Driver Updater - DriverStoreOfflineEnumDriverPackageW - {DriverPackageInfPath}";
+                    if (DriverStoreOfflineEnumDriverPackageInfoW.InboxInf == 0)
+                        existingDrivers.Add(DriverPackageInfPath);
+                    return 1;
+                }
+            , IntPtr.Zero, $"{DevicePart}\\Windows");
+
+            if (ntStatus < 0)
+            {
+                Logging.Log($"DriverStoreOfflineEnumDriverPackageW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                return;
+            }
+
+            Logging.Log("Uninstalling drivers...");
+
+            long Progress = 0;
+            DateTime startTime = DateTime.Now;
+
+            foreach (var driver in existingDrivers)
+            {
+                // Unreflect the modifications done by the driver package first on the target windows image
+                Console.Title = $"Driver Updater - DriverStoreOfflineDeleteDriverPackageW - {driver}";
+                Logging.ShowProgress(Progress++, existingDrivers.Count, startTime, false);
+                ntStatus = NativeMethods.DriverStoreOfflineDeleteDriverPackageW(driver, 0, IntPtr.Zero, $"{DevicePart}\\Windows", DevicePart);
+                if (ntStatus < 0)
+                {
+                    Logging.Log("");
+                    Logging.Log($"DriverStoreOfflineDeleteDriverPackageW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+
+                    return;
+                }
+            }
+            Logging.ShowProgress(existingDrivers.Count, existingDrivers.Count, startTime, false);
+            Logging.Log("");
+
+            Logging.Log("Installing new drivers...");
+
+            foreach (var path in definitionPaths)
+            {
+                Logging.Log(path);
+
+                // The where LINQ call is because directory can return .inf_ as well...
+                var infs = Directory.EnumerateFiles($"{DriverRepo}\\{path}", "*.inf", SearchOption.AllDirectories)
+                    .Where(x => x.EndsWith(".inf", StringComparison.InvariantCultureIgnoreCase));
+
+                Progress = 0;
+                startTime = DateTime.Now;
+
+                // Install every inf present in the component folder
+                foreach (var inf in infs)
+                {
+                    var destinationPath = new StringBuilder(260);
+                    int destinationPathLength = 260;
+
+                    // First add the driver package to the image
+                    Console.Title = $"Driver Updater - DriverStoreOfflineAddDriverPackageW - {inf}";
+                    Logging.ShowProgress(Progress++, infs.Count(), startTime, false);
+
+                    int maxAttempts = 3;
+                    int currentFails = 0;
+
+                    while (currentFails < maxAttempts)
+                    {
+                        ntStatus = NativeMethods.DriverStoreOfflineAddDriverPackageW(inf, 0x00000020 | 0x00000080 | 0x00000100, IntPtr.Zero, IsARM ? NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-US", destinationPath, ref destinationPathLength, $"{DevicePart}\\Windows", DevicePart);
+
+                        /* 
+                           Invalid ARG can be thrown when an issue happens with a specific driver inf
+                           No investigation done yet, but for now, this will do just fine
+                        */
+                        if (ntStatus == -2147024809)
+                            currentFails++;
+                        else
+                            break;
+                    }
+
+                    if (ntStatus < 0)
+                    {
+                        Logging.Log("");
+                        Logging.Log($"DriverStoreOfflineAddDriverPackageW: ntStatus={ntStatus}, destinationPathLength={destinationPathLength}, destinationPath={destinationPath}", Logging.LoggingLevel.Error);
+
+                        return;
+                    }
+                }
+                Logging.ShowProgress(infs.Count(), infs.Count(), startTime, false);
+                Logging.Log("");
+            }
         }
 
         static void Install(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, bool IsARM)
@@ -131,7 +294,7 @@ namespace DriverUpdater
             // If we have to perform an upgrade operation, and the previous action succeeded, queue the post upgrade package
             if (IntegratePostUpgrade)
             {
-                definitionPaths = definitionPaths.Union(new string[] { "components\\ANYSOC\\SUPPORT.DESKTOP.POST_UPGRADE_ENABLEMENT" }).ToArray();
+                definitionPaths = definitionPaths.Union(new string[] { @"components\ANYSOC\Support\Desktop\SUPPORT.DESKTOP.POST_UPGRADE_ENABLEMENT" }).ToArray();
             }
 
             // Ensure everything exists
