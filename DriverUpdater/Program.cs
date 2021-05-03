@@ -253,7 +253,10 @@ namespace DriverUpdater
 
                     while (currentFails < maxAttempts)
                     {
-                        ntStatus = NativeMethods.DriverStoreOfflineAddDriverPackageW(inf, 0x00000020 | 0x00000080 | 0x00000100, IntPtr.Zero, IsARM ? NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-US", destinationPath, ref destinationPathLength, $"{DevicePart}\\Windows", DevicePart);
+                        // 0x00000020: Use hard links when importing to the driver store
+                        // 0x00000080: Replace the driver package if it is already present in the driver store
+                        // 0x00000100: Force offline reflection regardless of device class when importing to the driver store
+                        ntStatus = NativeMethods.DriverStoreOfflineAddDriverPackageW(inf, 0x00000080, IntPtr.Zero, IsARM ? NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-US", destinationPath, ref destinationPathLength, $"{DevicePart}\\Windows", DevicePart);
 
                         /* 
                            Invalid ARG can be thrown when an issue happens with a specific driver inf
