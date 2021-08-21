@@ -55,6 +55,7 @@ namespace DriverUpdater
             string DevicePart = args[2];
             bool IntegratePostUpgrade = true;
             bool IsARM = false;
+            bool IsSafe = false;
 
             if (args.Count() > 3)
             {
@@ -67,6 +68,10 @@ namespace DriverUpdater
                     else if (arg == "--ARM")
                     {
                         IsARM = true;
+                    }
+                    else if (arg == "--Safe")
+                    {
+                        IsSafe = true;
                     }
                     else
                     {
@@ -87,7 +92,14 @@ namespace DriverUpdater
 
             try
             {
-                InstallSafe(Definition, DriverRepo, DevicePart, IntegratePostUpgrade, IsARM);
+                if (IsSafe)
+                {
+                    InstallSafe(Definition, DriverRepo, DevicePart, IntegratePostUpgrade, IsARM);
+                }
+                else
+                {
+                    Install(Definition, DriverRepo, DevicePart, IntegratePostUpgrade, IsARM);
+                }
             }
             catch (Exception ex)
             {
