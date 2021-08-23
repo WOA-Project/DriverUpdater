@@ -55,7 +55,7 @@ namespace DriverUpdater
             string DevicePart = args[2];
             bool IntegratePostUpgrade = true;
             bool IsARM = false;
-            bool IsSafe = false;
+            bool IsSafe = true;
 
             if (args.Count() > 3)
             {
@@ -69,9 +69,9 @@ namespace DriverUpdater
                     {
                         IsARM = true;
                     }
-                    else if (arg == "--Safe")
+                    else if (arg == "--Unsafe")
                     {
-                        IsSafe = true;
+                        IsSafe = false;
                     }
                     else
                     {
