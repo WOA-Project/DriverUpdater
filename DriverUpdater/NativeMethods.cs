@@ -123,6 +123,12 @@ namespace DriverUpdater
         None = 0
     }
 
+    [Flags]
+    internal enum DriverStoreUnpublishFlag : uint
+    {
+        None = 0
+    }
+
     internal enum DriverStoreObjectType : uint
     {
         DriverDatabase = 1
@@ -299,6 +305,15 @@ namespace DriverUpdater
             IntPtr driverStoreHandle,
             string driverStoreFileName,
             DriverStorePublishFlag flag,
+            StringBuilder publishedFileName,
+            int publishedFileNameSize,
+            ref bool isPublishedFileNameChanged);
+
+        [DllImport("drvstore.dll", CharSet = CharSet.Unicode, EntryPoint = "DriverStoreUnpublishW", SetLastError = true)]
+        internal static extern uint DriverStoreUnpublish(
+            IntPtr driverStoreHandle,
+            string driverStoreFileName,
+            DriverStoreUnpublishFlag flag,
             StringBuilder publishedFileName,
             int publishedFileNameSize,
             ref bool isPublishedFileNameChanged);
