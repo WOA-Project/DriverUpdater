@@ -362,7 +362,6 @@ namespace DriverUpdater
             }
 
         exit:
-            NativeMethods.DriverStoreClose(hDriverStore);
             return ntStatus;
         }
 
@@ -415,7 +414,6 @@ namespace DriverUpdater
             }
 
         exit:
-            NativeMethods.DriverStoreClose(hDriverStore);
             return ntStatus;
         }
     }
