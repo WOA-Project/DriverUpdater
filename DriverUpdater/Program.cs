@@ -32,9 +32,9 @@ using System.Text;
 
 namespace DriverUpdater
 {
-    class Program
+    internal static class Program
     {
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
             Logging.Log($"DriverUpdater {Assembly.GetExecutingAssembly().GetName().Version} - Cleans and Installs a new set of drivers onto a Windows Image");
             Logging.Log("Copyright (c) 2017-2021, The LumiaWOA Authors");
@@ -44,7 +44,7 @@ namespace DriverUpdater
             Logging.Log("This is free software, and you are welcome to redistribute it under certain conditions.");
             Logging.Log("");
 
-            if (args.Count() < 3)
+            if (args.Length < 3)
             {
                 Logging.Log("Usage: DriverUpdater <Path to definition> <Path to Driver repository> <Path to Device partition>");
                 return;
@@ -57,9 +57,9 @@ namespace DriverUpdater
             bool IsARM = false;
             bool IsSafe = true;
 
-            if (args.Count() > 3)
+            if (args.Length > 3)
             {
-                foreach (var arg in args.Skip(3))
+                foreach (string arg in args.Skip(3))
                 {
                     if (arg == "--NoIntegratePostUpgrade")
                     {
@@ -88,7 +88,9 @@ namespace DriverUpdater
             }
 
             if (!IntegratePostUpgrade)
+            {
                 Logging.Log("Not going to perform upgrade enablement.", Logging.LoggingLevel.Warning);
+            }
 
             try
             {
@@ -112,16 +114,21 @@ namespace DriverUpdater
 
         private static bool ResealForPnPFirstBootUxInternal(string DevicePart)
         {
-            using var file = File.Open(Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM"), FileMode.Open, FileAccess.ReadWrite);
-            using var hive = new DiscUtils.Registry.RegistryHive(file, DiscUtils.Streams.Ownership.Dispose);
-            var hwconf = hive.Root.OpenSubKey("HardwareConfig");
+            using FileStream file = File.Open(Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM"), FileMode.Open, FileAccess.ReadWrite);
+            using DiscUtils.Registry.RegistryHive hive = new(file, DiscUtils.Streams.Ownership.Dispose);
+            DiscUtils.Registry.RegistryKey hwconf = hive.Root.OpenSubKey("HardwareConfig");
             if (hwconf != null)
             {
                 Logging.Log("Resealing image to PnP FirstBootUx...");
-                foreach (var subkey in hwconf.GetSubKeyNames())
+                foreach (string subkey in hwconf.GetSubKeyNames())
+                {
                     hwconf.DeleteSubKeyTree(subkey);
-                foreach (var subval in hwconf.GetValueNames())
+                }
+
+                foreach (string subval in hwconf.GetValueNames())
+                {
                     hwconf.DeleteValue(subval);
+                }
 
                 return true;
             }
@@ -129,7 +136,7 @@ namespace DriverUpdater
             return false;
         }
 
-        static bool ResealForPnPFirstBootUx(string DevicePart)
+        private static bool ResealForPnPFirstBootUx(string DevicePart)
         {
             bool result = false;
             try
@@ -138,21 +145,33 @@ namespace DriverUpdater
             }
             catch (NotImplementedException)
             {
-                var proc = new Process();
-                proc.StartInfo = new ProcessStartInfo("reg.exe", $"load HKLM\\DriverUpdater {Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM")}");
-                proc.StartInfo.UseShellExecute = false;
+                using Process proc = new()
+                {
+                    StartInfo = new ProcessStartInfo("reg.exe", $"load HKLM\\DriverUpdater {Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM")}")
+                    {
+                        UseShellExecute = false
+                    }
+                };
                 proc.Start();
                 proc.WaitForExit();
                 if (proc.ExitCode != 0)
+                {
                     throw new Exception("Couldn't load registry hive");
+                }
 
-                proc = new Process();
-                proc.StartInfo = new ProcessStartInfo("reg.exe", $"unload HKLM\\DriverUpdater");
-                proc.StartInfo.UseShellExecute = false;
-                proc.Start();
-                proc.WaitForExit();
-                if (proc.ExitCode != 0)
+                using Process proc2 = new()
+                {
+                    StartInfo = new ProcessStartInfo("reg.exe", "unload HKLM\\DriverUpdater")
+                    {
+                        UseShellExecute = false
+                    }
+                };
+                proc2.Start();
+                proc2.WaitForExit();
+                if (proc2.ExitCode != 0)
+                {
                     throw new Exception("Couldn't unload registry hive");
+                }
 
                 result = ResealForPnPFirstBootUxInternal(DevicePart);
             }
@@ -160,7 +179,7 @@ namespace DriverUpdater
             return result;
         }
 
-        static void InstallSafe(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, bool IsARM)
+        private static void InstallSafe(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, bool IsARM)
         {
             Logging.Log("Reading definition file...");
 
@@ -180,7 +199,7 @@ namespace DriverUpdater
             }
 
             // Ensure everything exists
-            foreach (var path in definitionPaths)
+            foreach (string path in definitionPaths)
             {
                 if (!Directory.Exists($"{DriverRepo}\\{path}"))
                 {
@@ -191,27 +210,30 @@ namespace DriverUpdater
 
             Logging.Log("Enumerating existing drivers...");
 
-            List<string> existingDrivers = new List<string>();
+            List<string> existingDrivers = new();
 
-            int ntStatus = NativeMethods.DriverStoreOfflineEnumDriverPackageW(
+            uint ntStatus = NativeMethods.DriverStoreOfflineEnumDriverPackage(
                 (
                     string DriverPackageInfPath,
                     IntPtr Ptr,
                     IntPtr Unknown
                 ) =>
                 {
-                    NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW DriverStoreOfflineEnumDriverPackageInfoW =
-                        (NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW)Marshal.PtrToStructure(Ptr, typeof(NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW));
-                    Console.Title = $"Driver Updater - DriverStoreOfflineEnumDriverPackageW - {DriverPackageInfPath}";
+                    NativeMethods.DriverStoreOfflineEnumDriverPackageInfo DriverStoreOfflineEnumDriverPackageInfoW =
+                        (NativeMethods.DriverStoreOfflineEnumDriverPackageInfo)Marshal.PtrToStructure(Ptr, typeof(NativeMethods.DriverStoreOfflineEnumDriverPackageInfo));
+                    Console.Title = $"Driver Updater - DriverStoreOfflineEnumDriverPackage - {DriverPackageInfPath}";
                     if (DriverStoreOfflineEnumDriverPackageInfoW.InboxInf == 0)
+                    {
                         existingDrivers.Add(DriverPackageInfPath);
+                    }
+
                     return 1;
                 }
             , IntPtr.Zero, $"{DevicePart}\\Windows");
 
-            if (ntStatus < 0)
+            if ((ntStatus & 0x80000000) != 0)
             {
-                Logging.Log($"DriverStoreOfflineEnumDriverPackageW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                Logging.Log($"DriverStoreOfflineEnumDriverPackage: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
                 return;
             }
 
@@ -220,16 +242,16 @@ namespace DriverUpdater
             long Progress = 0;
             DateTime startTime = DateTime.Now;
 
-            foreach (var driver in existingDrivers)
+            foreach (string driver in existingDrivers)
             {
                 // Unreflect the modifications done by the driver package first on the target windows image
-                Console.Title = $"Driver Updater - DriverStoreOfflineDeleteDriverPackageW - {driver}";
+                Console.Title = $"Driver Updater - DriverStoreOfflineDeleteDriverPackage - {driver}";
                 Logging.ShowProgress(Progress++, existingDrivers.Count, startTime, false);
-                ntStatus = NativeMethods.DriverStoreOfflineDeleteDriverPackageW(driver, 0, IntPtr.Zero, $"{DevicePart}\\Windows", DevicePart);
-                if (ntStatus < 0)
+                ntStatus = NativeMethods.DriverStoreOfflineDeleteDriverPackage(driver, 0, IntPtr.Zero, $"{DevicePart}\\Windows", DevicePart);
+                if ((ntStatus & 0x80000000) != 0)
                 {
                     Logging.Log("");
-                    Logging.Log($"DriverStoreOfflineDeleteDriverPackageW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                    Logging.Log($"DriverStoreOfflineDeleteDriverPackage: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
 
                     return;
                 }
@@ -239,28 +261,28 @@ namespace DriverUpdater
 
             Logging.Log("Installing new drivers...");
 
-            foreach (var path in definitionPaths)
+            foreach (string path in definitionPaths)
             {
                 Logging.Log(path);
 
                 // The where LINQ call is because directory can return .inf_ as well...
-                var infs = Directory.EnumerateFiles($"{DriverRepo}\\{path}", "*.inf", SearchOption.AllDirectories)
+                IEnumerable<string> infs = Directory.EnumerateFiles($"{DriverRepo}\\{path}", "*.inf", SearchOption.AllDirectories)
                     .Where(x => x.EndsWith(".inf", StringComparison.InvariantCultureIgnoreCase));
 
                 Progress = 0;
                 startTime = DateTime.Now;
 
                 // Install every inf present in the component folder
-                foreach (var inf in infs)
+                foreach (string inf in infs)
                 {
-                    var destinationPath = new StringBuilder(260);
+                    StringBuilder destinationPath = new(260);
                     int destinationPathLength = 260;
 
                     // First add the driver package to the image
-                    Console.Title = $"Driver Updater - DriverStoreOfflineAddDriverPackageW - {inf}";
+                    Console.Title = $"Driver Updater - DriverStoreOfflineAddDriverPackage - {inf}";
                     Logging.ShowProgress(Progress++, infs.Count(), startTime, false);
 
-                    int maxAttempts = 3;
+                    const int maxAttempts = 3;
                     int currentFails = 0;
 
                     while (currentFails < maxAttempts)
@@ -268,22 +290,26 @@ namespace DriverUpdater
                         // 0x00000020: Use hard links when importing to the driver store
                         // 0x00000080: Replace the driver package if it is already present in the driver store
                         // 0x00000100: Force offline reflection regardless of device class when importing to the driver store
-                        ntStatus = NativeMethods.DriverStoreOfflineAddDriverPackageW(inf, 0x00000080, IntPtr.Zero, IsARM ? NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-US", destinationPath, ref destinationPathLength, $"{DevicePart}\\Windows", DevicePart);
+                        ntStatus = NativeMethods.DriverStoreOfflineAddDriverPackage(inf, DriverStoreOfflineAddDriverPackageFlags.ReplacePackage, IntPtr.Zero, (ushort)(IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64), "en-US", destinationPath, ref destinationPathLength, $"{DevicePart}\\Windows", DevicePart);
 
                         /* 
                            Invalid ARG can be thrown when an issue happens with a specific driver inf
                            No investigation done yet, but for now, this will do just fine
                         */
-                        if (ntStatus == -2147024809)
+                        if (ntStatus == 0x80070057)
+                        {
                             currentFails++;
+                        }
                         else
+                        {
                             break;
+                        }
                     }
 
-                    if (ntStatus < 0)
+                    if ((ntStatus & 0x80000000) != 0)
                     {
                         Logging.Log("");
-                        Logging.Log($"DriverStoreOfflineAddDriverPackageW: ntStatus={ntStatus}, destinationPathLength={destinationPathLength}, destinationPath={destinationPath}", Logging.LoggingLevel.Error);
+                        Logging.Log($"DriverStoreOfflineAddDriverPackage: ntStatus={ntStatus}, destinationPathLength={destinationPathLength}, destinationPath={destinationPath}", Logging.LoggingLevel.Error);
 
                         return;
                     }
@@ -293,7 +319,7 @@ namespace DriverUpdater
             }
         }
 
-        static void Install(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, bool IsARM)
+        private static void Install(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, bool IsARM)
         {
             Logging.Log("Reading definition file...");
 
@@ -313,7 +339,7 @@ namespace DriverUpdater
             }
 
             // Ensure everything exists
-            foreach (var path in definitionPaths)
+            foreach (string path in definitionPaths)
             {
                 if (!Directory.Exists($"{DriverRepo}\\{path}"))
                 {
@@ -324,27 +350,30 @@ namespace DriverUpdater
 
             Logging.Log("Enumerating existing drivers...");
 
-            List<string> existingDrivers = new List<string>();
+            List<string> existingDrivers = new();
 
-            int ntStatus = NativeMethods.DriverStoreOfflineEnumDriverPackageW(
+            uint ntStatus = NativeMethods.DriverStoreOfflineEnumDriverPackage(
                 (
                     string DriverPackageInfPath,
                     IntPtr Ptr,
                     IntPtr Unknown
                 ) =>
                 {
-                    NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW DriverStoreOfflineEnumDriverPackageInfoW =
-                        (NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW)Marshal.PtrToStructure(Ptr, typeof(NativeMethods.DriverStoreOfflineEnumDriverPackageInfoW));
-                    Console.Title = $"Driver Updater - DriverStoreOfflineEnumDriverPackageW - {DriverPackageInfPath}";
+                    NativeMethods.DriverStoreOfflineEnumDriverPackageInfo DriverStoreOfflineEnumDriverPackageInfoW =
+                        (NativeMethods.DriverStoreOfflineEnumDriverPackageInfo)Marshal.PtrToStructure(Ptr, typeof(NativeMethods.DriverStoreOfflineEnumDriverPackageInfo));
+                    Console.Title = $"Driver Updater - DriverStoreOfflineEnumDriverPackage - {DriverPackageInfPath}";
                     if (DriverStoreOfflineEnumDriverPackageInfoW.InboxInf == 0)
+                    {
                         existingDrivers.Add(DriverPackageInfPath);
+                    }
+
                     return 1;
                 }
             , IntPtr.Zero, $"{DevicePart}\\Windows");
 
-            if (ntStatus < 0)
+            if ((ntStatus & 0x80000000) != 0)
             {
-                Logging.Log($"DriverStoreOfflineEnumDriverPackageW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                Logging.Log($"DriverStoreOfflineEnumDriverPackage: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
                 return;
             }
 
@@ -353,39 +382,39 @@ namespace DriverUpdater
             long Progress = 0;
             DateTime startTime = DateTime.Now;
 
-            IntPtr hDriverStore = NativeMethods.DriverStoreOpenW($"{DevicePart}\\Windows", DevicePart, 0, IntPtr.Zero);
+            IntPtr hDriverStore = NativeMethods.DriverStoreOpen($"{DevicePart}\\Windows", DevicePart, 0, IntPtr.Zero);
             if (hDriverStore == IntPtr.Zero)
             {
-                if (ntStatus < 0)
+                if ((ntStatus & 0x80000000) != 0)
                 {
                     Logging.Log("");
-                    Logging.Log($"DriverStoreOpenW: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
+                    Logging.Log($"DriverStoreOpen: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
                     return;
                 }
             }
 
-            foreach (var driver in existingDrivers)
+            foreach (string driver in existingDrivers)
             {
                 // Unreflect the modifications done by the driver package first on the target windows image
-                Console.Title = $"Driver Updater - DriverStoreUnreflectCriticalW - {driver}";
+                Console.Title = $"Driver Updater - DriverStoreUnreflectCritical - {driver}";
                 Logging.ShowProgress(Progress++, existingDrivers.Count, startTime, false);
-                ntStatus = NativeMethods.DriverStoreUnreflectCriticalW(hDriverStore, driver, 0, null);
-                if (ntStatus < 0)
+                ntStatus = NativeMethods.DriverStoreUnreflectCritical(hDriverStore, driver, 0, null);
+                if ((ntStatus & 0x80000000) != 0)
                 {
                     Logging.Log("");
-                    Logging.Log($"DriverStoreUnreflectCriticalW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                    Logging.Log($"DriverStoreUnreflectCritical: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
                     NativeMethods.DriverStoreClose(hDriverStore);
 
                     return;
                 }
 
                 // And then remove the driver package from the target image
-                Console.Title = $"Driver Updater - DriverStoreDeleteW - {driver}";
-                ntStatus = NativeMethods.DriverStoreDeleteW(hDriverStore, driver, 0);
-                if (ntStatus < 0)
+                Console.Title = $"Driver Updater - DriverStoreDelete - {driver}";
+                ntStatus = NativeMethods.DriverStoreDelete(hDriverStore, driver, 0);
+                if ((ntStatus & 0x80000000) != 0)
                 {
                     Logging.Log("");
-                    Logging.Log($"DriverStoreDeleteW: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                    Logging.Log($"DriverStoreDelete: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
                     NativeMethods.DriverStoreClose(hDriverStore);
 
                     return;
@@ -396,25 +425,25 @@ namespace DriverUpdater
 
             Logging.Log("Installing new drivers...");
 
-            foreach (var path in definitionPaths)
+            foreach (string path in definitionPaths)
             {
                 Logging.Log(path);
 
                 // The where LINQ call is because directory can return .inf_ as well...
-                var infs = Directory.EnumerateFiles($"{DriverRepo}\\{path}", "*.inf", SearchOption.AllDirectories)
+                IEnumerable<string> infs = Directory.EnumerateFiles($"{DriverRepo}\\{path}", "*.inf", SearchOption.AllDirectories)
                     .Where(x => x.EndsWith(".inf", StringComparison.InvariantCultureIgnoreCase));
 
                 Progress = 0;
                 startTime = DateTime.Now;
 
                 // Install every inf present in the component folder
-                foreach (var inf in infs)
+                foreach (string inf in infs)
                 {
-                    var destinationPath = new StringBuilder(260);
-                    int destinationPathLength = 260;
+                    StringBuilder destinationPath = new(260);
+                    const int destinationPathLength = 260;
 
                     // First add the driver package to the image
-                    Console.Title = $"Driver Updater - DriverStoreImportW - {inf}";
+                    Console.Title = $"Driver Updater - DriverStoreImport - {inf}";
                     Logging.ShowProgress(Progress++, infs.Count(), startTime, false);
 
                     int maxAttempts = 3;
@@ -422,50 +451,58 @@ namespace DriverUpdater
 
                     while (currentFails < maxAttempts)
                     {
-                        ntStatus = NativeMethods.DriverStoreImportW(hDriverStore, inf, IsARM ? NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : NativeMethods.ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-us", 0x20 | 0x2000, destinationPath, ref destinationPathLength);
+                        ntStatus = NativeMethods.DriverStoreImport(hDriverStore, inf, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-us", DriverStoreImportFlag.Replace | DriverStoreImportFlag.SystemCritical, destinationPath, destinationPathLength);
 
                         /* 
                            Invalid ARG can be thrown when an issue happens with a specific driver inf
                            No investigation done yet, but for now, this will do just fine
                         */
-                        if (ntStatus == -2147024809)
+                        if (ntStatus == 0x80070057)
+                        {
                             currentFails++;
+                        }
                         else
+                        {
                             break;
+                        }
                     }
 
-                    if (ntStatus < 0)
+                    if ((ntStatus & 0x80000000) != 0)
                     {
                         Logging.Log("");
-                        Logging.Log($"DriverStoreImportW: ntStatus={ntStatus}, destinationPathLength={destinationPathLength}, destinationPath={destinationPath}", Logging.LoggingLevel.Error);
+                        Logging.Log($"DriverStoreImport: ntStatus={ntStatus}, destinationPathLength={destinationPathLength}, destinationPath={destinationPath}", Logging.LoggingLevel.Error);
                         NativeMethods.DriverStoreClose(hDriverStore);
 
                         return;
                     }
 
                     // And then reflect it into the target image
-                    Console.Title = $"Driver Updater - DriverStoreReflectCriticalW - {inf}";
+                    Console.Title = $"Driver Updater - DriverStoreReflectCritical - {inf}";
                     maxAttempts = 3;
                     currentFails = 0;
 
                     while (currentFails < maxAttempts)
                     {
-                        ntStatus = NativeMethods.DriverStoreReflectCriticalW(hDriverStore, destinationPath.ToString(), 0, null);
+                        ntStatus = NativeMethods.DriverStoreReflectCritical(hDriverStore, destinationPath.ToString(), 0, null);
 
                         /* 
                            Invalid ARG can be thrown when an issue happens with a specific driver inf
                            No investigation done yet, but for now, this will do just fine
                         */
-                        if (ntStatus == -2147024809)
+                        if (ntStatus == 0x80070057)
+                        {
                             currentFails++;
+                        }
                         else
+                        {
                             break;
+                        }
                     }
 
-                    if (ntStatus < 0)
+                    if ((ntStatus & 0x80000000) != 0)
                     {
                         Logging.Log("");
-                        Logging.Log($"DriverStoreReflectCriticalW: ntStatus={ntStatus}, destinationPathLength={destinationPathLength}, destinationPath={destinationPath}", Logging.LoggingLevel.Error);
+                        Logging.Log($"DriverStoreReflectCritical: ntStatus={ntStatus}, destinationPathLength={destinationPathLength}, destinationPath={destinationPath}", Logging.LoggingLevel.Error);
                         NativeMethods.DriverStoreClose(hDriverStore);
 
                         return;
@@ -476,6 +513,78 @@ namespace DriverUpdater
             }
 
             NativeMethods.DriverStoreClose(hDriverStore);
+        }
+
+        public static bool IsDriverValid(string inf, bool IsARM)
+        {
+            try
+            {
+                IntPtr driverPackage = NativeMethods.DriverPackageOpen(inf, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-us", DriverPackageOpenFlag.StrictValidation | DriverPackageOpenFlag.PrimaryOnly, IntPtr.Zero);
+                NativeMethods.DriverPackageClose(driverPackage);
+                return true;
+            }
+            catch { }
+            return false;
+        }
+
+        public static uint AddDriver(string inf, string DevicePart, bool IsARM)
+        {
+            uint ntStatus;
+            if (!IsDriverValid(inf, IsARM))
+            {
+                ntStatus = 0x80000000;
+                Logging.Log("");
+                Logging.Log($"IsDriverValid: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
+                return ntStatus;
+            }
+
+            IntPtr hDriverStore = NativeMethods.DriverStoreOpen($"{DevicePart}\\Windows", DevicePart, 0, IntPtr.Zero);
+            if (hDriverStore == IntPtr.Zero)
+            {
+                ntStatus = 0x80000000;
+                Logging.Log("");
+                Logging.Log($"DriverStoreOpen: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
+                return ntStatus;
+            }
+
+            StringBuilder driverStoreFileName = new(260);
+            const DriverStoreImportFlag importFlags =
+                DriverStoreImportFlag.SkipTempCopy |
+                DriverStoreImportFlag.SkipExternalFileCheck |
+                DriverStoreImportFlag.SystemDefaultLocale |
+                DriverStoreImportFlag.Hardlink |
+                DriverStoreImportFlag.PublishSameName |
+                DriverStoreImportFlag.NoRestorePoint;
+
+            ntStatus = NativeMethods.DriverStoreImport(hDriverStore, inf, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, null, importFlags, driverStoreFileName, driverStoreFileName.Capacity);
+            if ((ntStatus & 0x80000000) != 0)
+            {
+                Logging.Log("");
+                Logging.Log($"DriverStoreImport: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
+                return ntStatus;
+            }
+
+            StringBuilder publishedFileName = new(260);
+            bool isPublishedFileNameChanged = false;
+
+            ntStatus = NativeMethods.DriverStorePublish(hDriverStore, driverStoreFileName.ToString(), DriverStorePublishFlag.None, publishedFileName, publishedFileName.Capacity, ref isPublishedFileNameChanged);
+            if ((ntStatus & 0x80000000) != 0)
+            {
+                Logging.Log("");
+                Logging.Log($"DriverStorePublish: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
+                return ntStatus;
+            }
+
+            const DriverStoreReflectCriticalFlag reflectFlags = DriverStoreReflectCriticalFlag.Force | DriverStoreReflectCriticalFlag.Configurations;
+            ntStatus = NativeMethods.DriverStoreReflectCritical(hDriverStore, driverStoreFileName.ToString(), reflectFlags, null);
+            if ((ntStatus & 0x80000000) != 0)
+            {
+                Logging.Log("");
+                Logging.Log($"DriverStoreReflectCritical: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
+                return ntStatus;
+            }
+
+            return ntStatus;
         }
     }
 }
