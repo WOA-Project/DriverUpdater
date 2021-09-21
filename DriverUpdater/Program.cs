@@ -233,19 +233,19 @@ namespace DriverUpdater
             long Progress = 0;
             DateTime startTime = DateTime.Now;
 
-            IntPtr hDriverStore = NativeMethods.DriverStoreOpen($"{DevicePart}\\Windows", DevicePart, 0, IntPtr.Zero);
+            /*IntPtr hDriverStore = NativeMethods.DriverStoreOpen($"{DevicePart}\\Windows", DevicePart, 0, IntPtr.Zero);
             if (hDriverStore == IntPtr.Zero)
             {
                 ntStatus = 0x80000000;
                 Logging.Log("");
                 Logging.Log($"DriverStoreOpen: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
                 return;
-            }
+            }*/
 
             foreach (string driver in existingDrivers)
             {
                 // Unreflect the modifications done by the driver package first on the target windows image
-                Console.Title = $"Driver Updater - DriverStoreUnreflectCritical - {driver}";
+                /*Console.Title = $"Driver Updater - DriverStoreUnreflectCritical - {driver}";
                 Logging.ShowProgress(Progress++, existingDrivers.Count, startTime, false);
 
                 ntStatus = RemoveDriver(driver, hDriverStore);
@@ -254,6 +254,17 @@ namespace DriverUpdater
                     Logging.Log("");
                     Logging.Log($"RemoveDriver: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
                     NativeMethods.DriverStoreClose(hDriverStore);
+
+                    return;
+                }*/
+                Console.Title = $"Driver Updater - RemoveOfflineDriver - {driver}";
+                Logging.ShowProgress(Progress++, existingDrivers.Count, startTime, false);
+
+                ntStatus = RemoveOfflineDriver(driver, DevicePart);
+                if ((ntStatus & 0x80000000) != 0)
+                {
+                    Logging.Log("");
+                    Logging.Log($"RemoveOfflineDriver: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
 
                     return;
                 }
@@ -286,7 +297,8 @@ namespace DriverUpdater
 
                     while (currentFails < maxAttempts)
                     {
-                        ntStatus = AddDriver(inf, hDriverStore, IsARM);
+                        /*ntStatus = AddDriver(inf, hDriverStore, IsARM);*/
+                        ntStatus = AddOfflineDriver(inf, DevicePart, IsARM);
 
                         /* 
                            Invalid ARG can be thrown when an issue happens with a specific driver inf
@@ -305,8 +317,8 @@ namespace DriverUpdater
                     if ((ntStatus & 0x80000000) != 0)
                     {
                         Logging.Log("");
-                        Logging.Log($"AddDriver: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
-                        NativeMethods.DriverStoreClose(hDriverStore);
+                        Logging.Log($"AddOfflineDriver: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                        //NativeMethods.DriverStoreClose(hDriverStore);
 
                         return;
                     }
@@ -315,7 +327,7 @@ namespace DriverUpdater
                 Logging.Log("");
             }
 
-            NativeMethods.DriverStoreClose(hDriverStore);
+            //NativeMethods.DriverStoreClose(hDriverStore);
         }
 
         public static bool IsDriverValid(string inf, bool IsARM)
@@ -358,6 +370,53 @@ namespace DriverUpdater
             {
                 Logging.Log("");
                 Logging.Log($"DriverStoreDelete: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
+                goto exit;
+            }
+
+        exit:
+            return ntStatus;
+        }
+
+        public static uint RemoveOfflineDriver(string driverStoreFileName, string DevicePart)
+        {
+            uint ntStatus;
+
+            ntStatus = NativeMethods.DriverStoreOfflineDeleteDriverPackage(driverStoreFileName, 0, IntPtr.Zero, $"{DevicePart}\\Windows", DevicePart);
+            if ((ntStatus & 0x80000000) != 0)
+            {
+                Logging.Log("");
+                Logging.Log($"DriverStoreOfflineDeleteDriverPackage: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
+                goto exit;
+            }
+
+        exit:
+            return ntStatus;
+        }
+
+        public static uint AddOfflineDriver(string inf, string DevicePart, bool IsARM)
+        {
+            uint ntStatus;
+            if (!IsDriverValid(inf, IsARM))
+            {
+                ntStatus = 0x80000000;
+                Logging.Log("");
+                Logging.Log($"IsDriverValid: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
+                return ntStatus;
+            }
+
+            StringBuilder driverStoreFileName = new(260);
+            const DriverStoreOfflineAddDriverPackageFlags importFlags =
+                DriverStoreOfflineAddDriverPackageFlags.NoTempCopy |
+                DriverStoreOfflineAddDriverPackageFlags.SkipExternalFilePresenceCheck |
+                DriverStoreOfflineAddDriverPackageFlags.UseHardLinks |
+                DriverStoreOfflineAddDriverPackageFlags.ReplacePackage |
+                DriverStoreOfflineAddDriverPackageFlags.Force;
+
+            ntStatus = NativeMethods.DriverStoreOfflineAddDriverPackage(inf, importFlags, IntPtr.Zero, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, null, driverStoreFileName, driverStoreFileName.Capacity, $"{DevicePart}\\Windows", DevicePart);
+            if ((ntStatus & 0x80000000) != 0)
+            {
+                Logging.Log("");
+                Logging.Log($"DriverStoreOfflineAddDriverPackage: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
                 goto exit;
             }
 

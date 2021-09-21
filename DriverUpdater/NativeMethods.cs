@@ -271,10 +271,10 @@ namespace DriverUpdater
             string DriverPackageInfPath,
             DriverStoreOfflineAddDriverPackageFlags Flags,
             IntPtr Reserved,
-            ushort ProcessorArchitecture,
+            ProcessorArchitecture ProcessorArchitecture,
             string LocaleName,
-            StringBuilder DestInfPath,
-            ref int cchDestInfPath,
+            StringBuilder driverStoreFileName,
+            int driverStoreFileNameSize,
             string TargetSystemRoot,
             string TargetSystemDrive);
 
