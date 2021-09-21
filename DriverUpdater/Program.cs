@@ -381,7 +381,7 @@ namespace DriverUpdater
                 DriverStoreImportFlag.SkipTempCopy |
                 DriverStoreImportFlag.SkipExternalFileCheck |
                 DriverStoreImportFlag.SystemDefaultLocale |
-                DriverStoreImportFlag.Hardlink |
+                //DriverStoreImportFlag.Hardlink |
                 DriverStoreImportFlag.PublishSameName |
                 DriverStoreImportFlag.NoRestorePoint;
 
@@ -404,7 +404,7 @@ namespace DriverUpdater
                 goto exit;
             }
 
-            const DriverStoreReflectCriticalFlag reflectFlags = DriverStoreReflectCriticalFlag.Force | DriverStoreReflectCriticalFlag.Configurations;
+            const DriverStoreReflectCriticalFlag reflectFlags = DriverStoreReflectCriticalFlag.Force; //| DriverStoreReflectCriticalFlag.Configurations;
             ntStatus = NativeMethods.DriverStoreReflectCritical(hDriverStore, driverStoreFileName.ToString(), reflectFlags, null);
             if ((ntStatus & 0x80000000) != 0)
             {
