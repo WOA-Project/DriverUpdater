@@ -273,8 +273,8 @@ namespace DriverUpdater
             IntPtr Reserved,
             ProcessorArchitecture ProcessorArchitecture,
             string LocaleName,
-            StringBuilder driverStoreFileName,
-            int driverStoreFileNameSize,
+            StringBuilder DestInfPath,
+            ref int cchDestInfPath,
             string TargetSystemRoot,
             string TargetSystemDrive);
 

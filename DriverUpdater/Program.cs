@@ -412,7 +412,9 @@ namespace DriverUpdater
                 DriverStoreOfflineAddDriverPackageFlags.ReplacePackage |
                 DriverStoreOfflineAddDriverPackageFlags.Force;
 
-            ntStatus = NativeMethods.DriverStoreOfflineAddDriverPackage(inf, importFlags, IntPtr.Zero, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-US", driverStoreFileName, driverStoreFileName.Capacity, $"{DevicePart}\\Windows", DevicePart);
+            int cchDestInfPath = driverStoreFileName.Capacity;
+
+            ntStatus = NativeMethods.DriverStoreOfflineAddDriverPackage(inf, importFlags, IntPtr.Zero, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-US", driverStoreFileName, ref cchDestInfPath, $"{DevicePart}\\Windows", DevicePart);
             if ((ntStatus & 0x80000000) != 0)
             {
                 Logging.Log("");
