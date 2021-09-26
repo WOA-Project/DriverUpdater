@@ -405,12 +405,12 @@ namespace DriverUpdater
             }
 
             StringBuilder driverStoreFileName = new(260);
-            const DriverStoreOfflineAddDriverPackageFlags importFlags =
-                DriverStoreOfflineAddDriverPackageFlags.NoTempCopy |
+            const DriverStoreOfflineAddDriverPackageFlags importFlags = DriverStoreOfflineAddDriverPackageFlags.None;
+                /*DriverStoreOfflineAddDriverPackageFlags.NoTempCopy |
                 DriverStoreOfflineAddDriverPackageFlags.SkipExternalFilePresenceCheck |
                 DriverStoreOfflineAddDriverPackageFlags.UseHardLinks |
                 DriverStoreOfflineAddDriverPackageFlags.ReplacePackage |
-                DriverStoreOfflineAddDriverPackageFlags.Force;
+                DriverStoreOfflineAddDriverPackageFlags.Force;*/
 
             int cchDestInfPath = driverStoreFileName.Capacity;
 
