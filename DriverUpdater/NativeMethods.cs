@@ -157,6 +157,7 @@ namespace DriverUpdater
     [Flags]
     internal enum DriverPackageEnumFilesFlag : uint
     {
+        None = 0,
         Copy = 1,
         Delete = 2,
         Rename = 4,
@@ -173,6 +174,7 @@ namespace DriverUpdater
     [Flags]
     internal enum DriverPackageOpenFlag : uint
     {
+        None = 0,
         VersionOnly = 1,
         FilesOnly = 2,
         DefaultLanguage = 4,

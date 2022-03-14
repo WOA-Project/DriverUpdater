@@ -21,14 +21,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 */
+using Microsoft.Dism;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Text;
 
 namespace DriverUpdater
 {
@@ -89,7 +88,7 @@ namespace DriverUpdater
 
             try
             {
-                Install(Definition, DriverRepo, DevicePart, IntegratePostUpgrade, IsARM);
+                Install(Definition, DriverRepo, DevicePart, IntegratePostUpgrade, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64);
             }
             catch (Exception ex)
             {
@@ -167,7 +166,7 @@ namespace DriverUpdater
             return result;
         }
 
-        private static void Install(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, bool IsARM)
+        private static void Install(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, ProcessorArchitecture processorArchitecture)
         {
             Logging.Log("Reading definition file...");
 
@@ -201,26 +200,7 @@ namespace DriverUpdater
 
             Logging.Log("Enumerating existing drivers...");
 
-            List<string> existingDrivers = new();
-
-            uint ntStatus = NativeMethods.DriverStoreOfflineEnumDriverPackage(
-                (
-                    string DriverPackageInfPath,
-                    IntPtr Ptr,
-                    IntPtr Unknown
-                ) =>
-                {
-                    NativeMethods.DriverStoreOfflineEnumDriverPackageInfo DriverStoreOfflineEnumDriverPackageInfoW =
-                        (NativeMethods.DriverStoreOfflineEnumDriverPackageInfo)Marshal.PtrToStructure(Ptr, typeof(NativeMethods.DriverStoreOfflineEnumDriverPackageInfo));
-                    Console.Title = $"Driver Updater - DriverStoreOfflineEnumDriverPackage - {DriverPackageInfPath}";
-                    if (DriverStoreOfflineEnumDriverPackageInfoW.InboxInf == 0)
-                    {
-                        existingDrivers.Add(DriverPackageInfPath);
-                    }
-
-                    return 1;
-                }
-            , IntPtr.Zero, $"{DevicePart}\\Windows");
+            uint ntStatus = DismGetInstalledOEMDrivers(DevicePart, out string[] existingDrivers);
 
             if ((ntStatus & 0x80000000) != 0)
             {
@@ -233,34 +213,12 @@ namespace DriverUpdater
             long Progress = 0;
             DateTime startTime = DateTime.Now;
 
-            /*IntPtr hDriverStore = NativeMethods.DriverStoreOpen($"{DevicePart}\\Windows", DevicePart, 0, IntPtr.Zero);
-            if (hDriverStore == IntPtr.Zero)
-            {
-                ntStatus = 0x80000000;
-                Logging.Log("");
-                Logging.Log($"DriverStoreOpen: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
-                return;
-            }*/
-
             foreach (string driver in existingDrivers)
             {
-                // Unreflect the modifications done by the driver package first on the target windows image
-                /*Console.Title = $"Driver Updater - DriverStoreUnreflectCritical - {driver}";
-                Logging.ShowProgress(Progress++, existingDrivers.Count, startTime, false);
-
-                ntStatus = RemoveDriver(driver, hDriverStore);
-                if ((ntStatus & 0x80000000) != 0)
-                {
-                    Logging.Log("");
-                    Logging.Log($"RemoveDriver: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
-                    NativeMethods.DriverStoreClose(hDriverStore);
-
-                    return;
-                }*/
                 Console.Title = $"Driver Updater - RemoveOfflineDriver - {driver}";
-                Logging.ShowProgress(Progress++, existingDrivers.Count, startTime, false);
+                Logging.ShowProgress(Progress++, existingDrivers.Count(), startTime, false);
 
-                ntStatus = RemoveOfflineDriver(driver, DevicePart);
+                ntStatus = DismRemoveOfflineDriver(driver, DevicePart);
                 if ((ntStatus & 0x80000000) != 0)
                 {
                     Logging.Log("");
@@ -269,7 +227,7 @@ namespace DriverUpdater
                     return;
                 }
             }
-            Logging.ShowProgress(existingDrivers.Count, existingDrivers.Count, startTime, false);
+            Logging.ShowProgress(existingDrivers.Count(), existingDrivers.Count(), startTime, false);
             Logging.Log("");
 
             Logging.Log("Installing new drivers...");
@@ -292,13 +250,12 @@ namespace DriverUpdater
                     Console.Title = $"Driver Updater - DriverStoreImport - {inf}";
                     Logging.ShowProgress(Progress++, infs.Count(), startTime, false);
 
-                    int maxAttempts = 3;
+                    const int maxAttempts = 3;
                     int currentFails = 0;
 
                     while (currentFails < maxAttempts)
                     {
-                        /*ntStatus = AddDriver(inf, hDriverStore, IsARM);*/
-                        ntStatus = AddOfflineDriver(inf, DevicePart, IsARM);
+                        ntStatus = DismAddOfflineDriver(inf, DevicePart, processorArchitecture);
 
                         /* 
                            Invalid ARG can be thrown when an issue happens with a specific driver inf
@@ -318,7 +275,6 @@ namespace DriverUpdater
                     {
                         Logging.Log("");
                         Logging.Log($"AddOfflineDriver: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
-                        //NativeMethods.DriverStoreClose(hDriverStore);
 
                         return;
                     }
@@ -326,50 +282,153 @@ namespace DriverUpdater
                 Logging.ShowProgress(infs.Count(), infs.Count(), startTime, false);
                 Logging.Log("");
             }
-
-            //NativeMethods.DriverStoreClose(hDriverStore);
         }
 
-        public static bool IsDriverValid(string inf, bool IsARM)
+        private static uint DismGetInstalledOEMDrivers(string DevicePart, out string[] existingDrivers)
         {
+            List<string> lexistingDrivers = new();
+
+            uint ntStatus = 0;
+
             try
             {
-                IntPtr driverPackage = NativeMethods.DriverPackageOpen(inf, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-us", DriverPackageOpenFlag.StrictValidation | DriverPackageOpenFlag.PrimaryOnly, IntPtr.Zero);
-                NativeMethods.DriverPackageClose(driverPackage);
-                return true;
+                using DismSession session = DismApi.OpenOfflineSession(DevicePart);
+
+                foreach (DismDriverPackage driver in DismApi.GetDrivers(session, false))
+                {
+                    lexistingDrivers.Add(driver.PublishedName);
+                }
             }
-            catch { }
-            return false;
+            catch (Exception e)
+            {
+                ntStatus = (uint)e.HResult;
+            }
+
+            existingDrivers = lexistingDrivers.ToArray();
+
+            return ntStatus;
         }
 
-        public static uint RemoveDriver(string driverStoreFileName, IntPtr hDriverStore)
+        public static uint DismRemoveOfflineDriver(string driverStoreFileName, string DevicePart)
         {
-            uint ntStatus;
+            uint ntStatus = 0;
 
-            ntStatus = NativeMethods.DriverStoreUnreflectCritical(hDriverStore, driverStoreFileName, 0, null);
+            try
+            {
+                using DismSession session = DismApi.OpenOfflineSession(DevicePart);
+
+                DismApi.RemoveDriver(session, driverStoreFileName);
+            }
+            catch (Exception e)
+            {
+                ntStatus = (uint)e.HResult;
+            }
+
+            return ntStatus;
+        }
+
+        public static uint DismAddOfflineDriver(string inf, string DevicePart, ProcessorArchitecture _)
+        {
+            uint ntStatus = 0;
+
+            try
+            {
+                using DismSession session = DismApi.OpenOfflineSession(DevicePart);
+
+                DismApi.AddDriver(session, inf, false);
+            }
+            catch (Exception e)
+            {
+                ntStatus = (uint)e.HResult;
+            }
+
+            return ntStatus;
+        }
+
+        /*private static uint GetInstalledOEMDrivers(string DevicePart, out string[] existingDrivers)
+        {
+            List<string> lexistingDrivers = new();
+
+            uint ntStatus = NativeMethods.DriverStoreOfflineEnumDriverPackage(
+                (
+                    string DriverPackageInfPath,
+                    IntPtr Ptr,
+                    IntPtr _
+                ) =>
+                {
+                    NativeMethods.DriverStoreOfflineEnumDriverPackageInfo DriverStoreOfflineEnumDriverPackageInfoW =
+                        (NativeMethods.DriverStoreOfflineEnumDriverPackageInfo)Marshal.PtrToStructure(Ptr, typeof(NativeMethods.DriverStoreOfflineEnumDriverPackageInfo));
+                    Console.Title = $"Driver Updater - DriverStoreOfflineEnumDriverPackage - {DriverPackageInfPath}";
+                    if (DriverStoreOfflineEnumDriverPackageInfoW.InboxInf == 0)
+                    {
+                        lexistingDrivers.Add(DriverPackageInfPath);
+                    }
+
+                    return 1;
+                }
+            , IntPtr.Zero, $"{DevicePart}\\Windows");
+
+            existingDrivers = lexistingDrivers.ToArray();
+
+            return ntStatus;
+        }
+
+        public static uint RemoveOfflineDriver(string driverStoreFileName, string DevicePart)
+        {
+            return NativeMethods.DriverStoreOfflineDeleteDriverPackage(
+                driverStoreFileName,
+                0,
+                IntPtr.Zero,
+                $"{DevicePart}\\Windows",
+                DevicePart);
+        }
+
+        public static uint AddOfflineDriver(string inf, string DevicePart, ProcessorArchitecture processorArchitecture)
+        {
+            StringBuilder driverStoreFileName = new(260);
+            int cchDestInfPath = driverStoreFileName.Capacity;
+            return NativeMethods.DriverStoreOfflineAddDriverPackage(
+                inf,
+                DriverStoreOfflineAddDriverPackageFlags.None,
+                IntPtr.Zero,
+                processorArchitecture,
+                "en-US",
+                driverStoreFileName,
+                ref cchDestInfPath,
+                $"{DevicePart}\\Windows",
+                DevicePart);
+        }*/
+
+        /*public static uint RemoveDriver(string driverStoreFileName, IntPtr hDriverStore)
+        {
+            uint ntStatus = NativeMethods.DriverStoreUnreflectCritical(
+                hDriverStore,
+                driverStoreFileName,
+                0,
+                null);
             if ((ntStatus & 0x80000000) != 0)
             {
-                Logging.Log("");
-                Logging.Log($"DriverStoreUnreflectCritical: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
                 goto exit;
             }
 
             StringBuilder publishedFileName = new(260);
             bool isPublishedFileNameChanged = false;
 
-            ntStatus = NativeMethods.DriverStoreUnpublish(hDriverStore, driverStoreFileName, DriverStoreUnpublishFlag.None, publishedFileName, publishedFileName.Capacity, ref isPublishedFileNameChanged);
+            ntStatus = NativeMethods.DriverStoreUnpublish(
+                hDriverStore,
+                driverStoreFileName,
+                DriverStoreUnpublishFlag.None,
+                publishedFileName,
+                publishedFileName.Capacity,
+                ref isPublishedFileNameChanged);
             if ((ntStatus & 0x80000000) != 0)
             {
-                Logging.Log("");
-                Logging.Log($"DriverStoreUnpublish: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
                 goto exit;
             }
 
             ntStatus = NativeMethods.DriverStoreDelete(hDriverStore, driverStoreFileName, 0);
             if ((ntStatus & 0x80000000) != 0)
             {
-                Logging.Log("");
-                Logging.Log($"DriverStoreDelete: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
                 goto exit;
             }
 
@@ -377,105 +436,52 @@ namespace DriverUpdater
             return ntStatus;
         }
 
-        public static uint RemoveOfflineDriver(string driverStoreFileName, string DevicePart)
+        public static uint AddDriver(string inf, IntPtr hDriverStore, ProcessorArchitecture processorArchitecture)
         {
             uint ntStatus;
-
-            ntStatus = NativeMethods.DriverStoreOfflineDeleteDriverPackage(driverStoreFileName, 0, IntPtr.Zero, $"{DevicePart}\\Windows", DevicePart);
-            if ((ntStatus & 0x80000000) != 0)
-            {
-                Logging.Log("");
-                Logging.Log($"DriverStoreOfflineDeleteDriverPackage: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
-                goto exit;
-            }
-
-        exit:
-            return ntStatus;
-        }
-
-        public static uint AddOfflineDriver(string inf, string DevicePart, bool IsARM)
-        {
-            uint ntStatus;
-            if (!IsDriverValid(inf, IsARM))
-            {
-                ntStatus = 0x80000000;
-                Logging.Log("");
-                Logging.Log($"IsDriverValid: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
-                return ntStatus;
-            }
 
             StringBuilder driverStoreFileName = new(260);
-            const DriverStoreOfflineAddDriverPackageFlags importFlags = DriverStoreOfflineAddDriverPackageFlags.None;
-                /*DriverStoreOfflineAddDriverPackageFlags.NoTempCopy |
-                DriverStoreOfflineAddDriverPackageFlags.SkipExternalFilePresenceCheck |
-                DriverStoreOfflineAddDriverPackageFlags.UseHardLinks |
-                DriverStoreOfflineAddDriverPackageFlags.ReplacePackage |
-                DriverStoreOfflineAddDriverPackageFlags.Force;*/
 
-            int cchDestInfPath = driverStoreFileName.Capacity;
-
-            ntStatus = NativeMethods.DriverStoreOfflineAddDriverPackage(inf, importFlags, IntPtr.Zero, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, "en-US", driverStoreFileName, ref cchDestInfPath, $"{DevicePart}\\Windows", DevicePart);
+            ntStatus = NativeMethods.DriverStoreImport(
+                hDriverStore,
+                inf,
+                processorArchitecture,
+                null,
+                DriverStoreImportFlag.None,
+                driverStoreFileName,
+                driverStoreFileName.Capacity);
             if ((ntStatus & 0x80000000) != 0)
             {
-                Logging.Log("");
-                Logging.Log($"DriverStoreOfflineAddDriverPackage: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
-                goto exit;
-            }
-
-        exit:
-            return ntStatus;
-        }
-
-        public static uint AddDriver(string inf, IntPtr hDriverStore, bool IsARM)
-        {
-            uint ntStatus;
-            if (!IsDriverValid(inf, IsARM))
-            {
-                ntStatus = 0x80000000;
-                Logging.Log("");
-                Logging.Log($"IsDriverValid: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
-                return ntStatus;
-            }
-
-            StringBuilder driverStoreFileName = new(260);
-            const DriverStoreImportFlag importFlags =
-                DriverStoreImportFlag.SkipTempCopy |
-                DriverStoreImportFlag.SkipExternalFileCheck |
-                DriverStoreImportFlag.SystemDefaultLocale |
-                //DriverStoreImportFlag.Hardlink |
-                DriverStoreImportFlag.PublishSameName |
-                DriverStoreImportFlag.NoRestorePoint;
-
-            ntStatus = NativeMethods.DriverStoreImport(hDriverStore, inf, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64, null, importFlags, driverStoreFileName, driverStoreFileName.Capacity);
-            if ((ntStatus & 0x80000000) != 0)
-            {
-                Logging.Log("");
-                Logging.Log($"DriverStoreImport: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
                 goto exit;
             }
 
             StringBuilder publishedFileName = new(260);
             bool isPublishedFileNameChanged = false;
 
-            ntStatus = NativeMethods.DriverStorePublish(hDriverStore, driverStoreFileName.ToString(), DriverStorePublishFlag.None, publishedFileName, publishedFileName.Capacity, ref isPublishedFileNameChanged);
+            ntStatus = NativeMethods.DriverStorePublish(
+                hDriverStore,
+                driverStoreFileName.ToString(),
+                DriverStorePublishFlag.None,
+                publishedFileName,
+                publishedFileName.Capacity,
+                ref isPublishedFileNameChanged);
             if ((ntStatus & 0x80000000) != 0)
             {
-                Logging.Log("");
-                Logging.Log($"DriverStorePublish: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
                 goto exit;
             }
 
-            const DriverStoreReflectCriticalFlag reflectFlags = DriverStoreReflectCriticalFlag.Force; //| DriverStoreReflectCriticalFlag.Configurations;
-            ntStatus = NativeMethods.DriverStoreReflectCritical(hDriverStore, driverStoreFileName.ToString(), reflectFlags, null);
+            ntStatus = NativeMethods.DriverStoreReflectCritical(
+                hDriverStore,
+                driverStoreFileName.ToString(),
+                DriverStoreReflectCriticalFlag.None,
+                null);
             if ((ntStatus & 0x80000000) != 0)
             {
-                Logging.Log("");
-                Logging.Log($"DriverStoreReflectCritical: ntStatus={Marshal.GetLastWin32Error()}", Logging.LoggingLevel.Error);
                 goto exit;
             }
 
         exit:
             return ntStatus;
-        }
+        }*/
     }
 }
