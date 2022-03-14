@@ -19,14 +19,26 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-using System;
+using CommandLine;
 
 namespace DriverUpdater
 {
-    public interface IDriverProvider : IDisposable
+    [Verb("update-drivers", isDefault: true, HelpText = "Updates the drivers on a target phone device.")]
+    internal class CLIOptions
     {
-        public uint GetInstalledOEMDrivers(out string[] existingDrivers);
-        public uint RemoveOfflineDriver(string driverStoreFileName);
-        public uint AddOfflineDriver(string driverStoreFileName);
+        [Option('d', "definition-file", HelpText = "The path to the definition file to use.", Required = true)]
+        public string DefinitionFile { get; set; }
+
+        [Option('r', "repository-path", HelpText = "The path to the driver repository.", Required = true)]
+        public string RepositoryPath { get; set; }
+
+        [Option('p', "phone-path", HelpText = "The path to the phone's Windows Installation.", Required = true)]
+        public string PhonePath { get; set; }
+
+        [Option('a', "is-arm32", HelpText = "Indicates the target runs an ARM32 Windows Operating System (EOL)", Required = false, Default = false)]
+        public bool IsARM { get; set; }
+
+        [Option('n', "no-integratepostupgrade", HelpText = "Indicates to not provision the target device for post upgrade tasks", Required = false, Default = false)]
+        public bool NoIntegratePostUpgrade { get; set; }
     }
 }
