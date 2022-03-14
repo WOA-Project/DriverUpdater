@@ -21,7 +21,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 */
-using Microsoft.Dism;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -166,7 +165,7 @@ namespace DriverUpdater
             return result;
         }
 
-        private static void Install(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, ProcessorArchitecture processorArchitecture)
+        private static void Install(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, ProcessorArchitecture _)
         {
             Logging.Log("Reading definition file...");
 
@@ -218,7 +217,7 @@ namespace DriverUpdater
             foreach (string driver in existingDrivers)
             {
                 Console.Title = $"Driver Updater - RemoveOfflineDriver - {driver}";
-                Logging.ShowProgress(Progress++, existingDrivers.Count(), startTime, false);
+                Logging.ShowProgress(Progress++, existingDrivers.Length, startTime, false);
 
                 ntStatus = driverProvider.RemoveOfflineDriver(driver);
                 if ((ntStatus & 0x80000000) != 0)
@@ -229,7 +228,7 @@ namespace DriverUpdater
                     return;
                 }
             }
-            Logging.ShowProgress(existingDrivers.Count(), existingDrivers.Count(), startTime, false);
+            Logging.ShowProgress(existingDrivers.Length, existingDrivers.Length, startTime, false);
             Logging.Log("");
 
             Logging.Log("Installing new drivers...");
