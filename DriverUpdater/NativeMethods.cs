@@ -35,7 +35,7 @@ namespace DriverUpdater
         Exclusive = 2
     }
 
-    internal enum ProcessorArchitecture : ushort
+    public enum ProcessorArchitecture : ushort
     {
         PROCESSOR_ARCHITECTURE_INTEL = 0,
         PROCESSOR_ARCHITECTURE_MIPS = 1,

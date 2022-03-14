@@ -198,9 +198,11 @@ namespace DriverUpdater
                 }
             }
 
+            using IDriverProvider driverProvider = new DismDriverProvider(DevicePart);
+
             Logging.Log("Enumerating existing drivers...");
 
-            uint ntStatus = DismGetInstalledOEMDrivers(DevicePart, out string[] existingDrivers);
+            uint ntStatus = driverProvider.GetInstalledOEMDrivers(out string[] existingDrivers);
 
             if ((ntStatus & 0x80000000) != 0)
             {
@@ -218,7 +220,7 @@ namespace DriverUpdater
                 Console.Title = $"Driver Updater - RemoveOfflineDriver - {driver}";
                 Logging.ShowProgress(Progress++, existingDrivers.Count(), startTime, false);
 
-                ntStatus = DismRemoveOfflineDriver(driver, DevicePart);
+                ntStatus = driverProvider.RemoveOfflineDriver(driver);
                 if ((ntStatus & 0x80000000) != 0)
                 {
                     Logging.Log("");
@@ -255,7 +257,7 @@ namespace DriverUpdater
 
                     while (currentFails < maxAttempts)
                     {
-                        ntStatus = DismAddOfflineDriver(inf, DevicePart, processorArchitecture);
+                        ntStatus = driverProvider.AddOfflineDriver(inf);
 
                         /* 
                            Invalid ARG can be thrown when an issue happens with a specific driver inf
@@ -283,205 +285,5 @@ namespace DriverUpdater
                 Logging.Log("");
             }
         }
-
-        private static uint DismGetInstalledOEMDrivers(string DevicePart, out string[] existingDrivers)
-        {
-            List<string> lexistingDrivers = new();
-
-            uint ntStatus = 0;
-
-            try
-            {
-                using DismSession session = DismApi.OpenOfflineSession(DevicePart);
-
-                foreach (DismDriverPackage driver in DismApi.GetDrivers(session, false))
-                {
-                    lexistingDrivers.Add(driver.PublishedName);
-                }
-            }
-            catch (Exception e)
-            {
-                ntStatus = (uint)e.HResult;
-            }
-
-            existingDrivers = lexistingDrivers.ToArray();
-
-            return ntStatus;
-        }
-
-        public static uint DismRemoveOfflineDriver(string driverStoreFileName, string DevicePart)
-        {
-            uint ntStatus = 0;
-
-            try
-            {
-                using DismSession session = DismApi.OpenOfflineSession(DevicePart);
-
-                DismApi.RemoveDriver(session, driverStoreFileName);
-            }
-            catch (Exception e)
-            {
-                ntStatus = (uint)e.HResult;
-            }
-
-            return ntStatus;
-        }
-
-        public static uint DismAddOfflineDriver(string inf, string DevicePart, ProcessorArchitecture _)
-        {
-            uint ntStatus = 0;
-
-            try
-            {
-                using DismSession session = DismApi.OpenOfflineSession(DevicePart);
-
-                DismApi.AddDriver(session, inf, false);
-            }
-            catch (Exception e)
-            {
-                ntStatus = (uint)e.HResult;
-            }
-
-            return ntStatus;
-        }
-
-        /*private static uint GetInstalledOEMDrivers(string DevicePart, out string[] existingDrivers)
-        {
-            List<string> lexistingDrivers = new();
-
-            uint ntStatus = NativeMethods.DriverStoreOfflineEnumDriverPackage(
-                (
-                    string DriverPackageInfPath,
-                    IntPtr Ptr,
-                    IntPtr _
-                ) =>
-                {
-                    NativeMethods.DriverStoreOfflineEnumDriverPackageInfo DriverStoreOfflineEnumDriverPackageInfoW =
-                        (NativeMethods.DriverStoreOfflineEnumDriverPackageInfo)Marshal.PtrToStructure(Ptr, typeof(NativeMethods.DriverStoreOfflineEnumDriverPackageInfo));
-                    Console.Title = $"Driver Updater - DriverStoreOfflineEnumDriverPackage - {DriverPackageInfPath}";
-                    if (DriverStoreOfflineEnumDriverPackageInfoW.InboxInf == 0)
-                    {
-                        lexistingDrivers.Add(DriverPackageInfPath);
-                    }
-
-                    return 1;
-                }
-            , IntPtr.Zero, $"{DevicePart}\\Windows");
-
-            existingDrivers = lexistingDrivers.ToArray();
-
-            return ntStatus;
-        }
-
-        public static uint RemoveOfflineDriver(string driverStoreFileName, string DevicePart)
-        {
-            return NativeMethods.DriverStoreOfflineDeleteDriverPackage(
-                driverStoreFileName,
-                0,
-                IntPtr.Zero,
-                $"{DevicePart}\\Windows",
-                DevicePart);
-        }
-
-        public static uint AddOfflineDriver(string inf, string DevicePart, ProcessorArchitecture processorArchitecture)
-        {
-            StringBuilder driverStoreFileName = new(260);
-            int cchDestInfPath = driverStoreFileName.Capacity;
-            return NativeMethods.DriverStoreOfflineAddDriverPackage(
-                inf,
-                DriverStoreOfflineAddDriverPackageFlags.None,
-                IntPtr.Zero,
-                processorArchitecture,
-                "en-US",
-                driverStoreFileName,
-                ref cchDestInfPath,
-                $"{DevicePart}\\Windows",
-                DevicePart);
-        }*/
-
-        /*public static uint RemoveDriver(string driverStoreFileName, IntPtr hDriverStore)
-        {
-            uint ntStatus = NativeMethods.DriverStoreUnreflectCritical(
-                hDriverStore,
-                driverStoreFileName,
-                0,
-                null);
-            if ((ntStatus & 0x80000000) != 0)
-            {
-                goto exit;
-            }
-
-            StringBuilder publishedFileName = new(260);
-            bool isPublishedFileNameChanged = false;
-
-            ntStatus = NativeMethods.DriverStoreUnpublish(
-                hDriverStore,
-                driverStoreFileName,
-                DriverStoreUnpublishFlag.None,
-                publishedFileName,
-                publishedFileName.Capacity,
-                ref isPublishedFileNameChanged);
-            if ((ntStatus & 0x80000000) != 0)
-            {
-                goto exit;
-            }
-
-            ntStatus = NativeMethods.DriverStoreDelete(hDriverStore, driverStoreFileName, 0);
-            if ((ntStatus & 0x80000000) != 0)
-            {
-                goto exit;
-            }
-
-        exit:
-            return ntStatus;
-        }
-
-        public static uint AddDriver(string inf, IntPtr hDriverStore, ProcessorArchitecture processorArchitecture)
-        {
-            uint ntStatus;
-
-            StringBuilder driverStoreFileName = new(260);
-
-            ntStatus = NativeMethods.DriverStoreImport(
-                hDriverStore,
-                inf,
-                processorArchitecture,
-                null,
-                DriverStoreImportFlag.None,
-                driverStoreFileName,
-                driverStoreFileName.Capacity);
-            if ((ntStatus & 0x80000000) != 0)
-            {
-                goto exit;
-            }
-
-            StringBuilder publishedFileName = new(260);
-            bool isPublishedFileNameChanged = false;
-
-            ntStatus = NativeMethods.DriverStorePublish(
-                hDriverStore,
-                driverStoreFileName.ToString(),
-                DriverStorePublishFlag.None,
-                publishedFileName,
-                publishedFileName.Capacity,
-                ref isPublishedFileNameChanged);
-            if ((ntStatus & 0x80000000) != 0)
-            {
-                goto exit;
-            }
-
-            ntStatus = NativeMethods.DriverStoreReflectCritical(
-                hDriverStore,
-                driverStoreFileName.ToString(),
-                DriverStoreReflectCriticalFlag.None,
-                null);
-            if ((ntStatus & 0x80000000) != 0)
-            {
-                goto exit;
-            }
-
-        exit:
-            return ntStatus;
-        }*/
     }
 }
