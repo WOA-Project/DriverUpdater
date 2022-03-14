@@ -16,7 +16,7 @@ namespace DriverUpdater
         public DriverStoreProvider2(string DevicePart, ProcessorArchitecture processorArchitecture)
         {
             this.DevicePart = DevicePart;
-            this.processorArchitecture = processorArchitecture; IntPtr hDriverStore = NativeMethods.DriverStoreOpen($"{DevicePart}\\Windows", DevicePart, 0, IntPtr.Zero);
+            this.processorArchitecture = processorArchitecture;
             hDriverStore = NativeMethods.DriverStoreOpen($"{DevicePart}\\Windows", DevicePart, 0, IntPtr.Zero);
             if (hDriverStore == IntPtr.Zero)
             {
