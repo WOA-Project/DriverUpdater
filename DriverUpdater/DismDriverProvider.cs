@@ -32,6 +32,7 @@ namespace DriverUpdater
 
         public DismDriverProvider(string DrivePath)
         {
+            DismApi.Initialize(DismLogLevel.LogErrors);
             session = DismApi.OpenOfflineSession(DrivePath);
         }
 
