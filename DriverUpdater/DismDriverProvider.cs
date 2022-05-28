@@ -32,6 +32,11 @@ namespace DriverUpdater
 
         public DismDriverProvider(string DrivePath)
         {
+            // Workaround for issue in DISM api
+            if (!DrivePath.EndsWith("\\"))
+            {
+                DrivePath += "\\";
+            }
             DismApi.Initialize(DismLogLevel.LogErrors);
             session = DismApi.OpenOfflineSession(DrivePath);
         }
