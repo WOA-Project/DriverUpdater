@@ -258,7 +258,7 @@ namespace DriverUpdater
                     if ((ntStatus & 0x80000000) != 0)
                     {
                         Logging.Log("");
-                        Logging.Log($"AddOfflineDriver: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                        Logging.Log($"AddOfflineDriver: ntStatus={ntStatus}, driverInf={inf}", Logging.LoggingLevel.Error);
 
                         return;
                     }
