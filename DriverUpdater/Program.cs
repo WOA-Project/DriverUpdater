@@ -194,7 +194,7 @@ namespace DriverUpdater
 
             if ((ntStatus & 0x80000000) != 0)
             {
-                Logging.Log($"DriverStoreOfflineEnumDriverPackage: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                Logging.Log($"DriverStoreOfflineEnumDriverPackage: ntStatus=0x{ntStatus:X8}", Logging.LoggingLevel.Error);
                 return false;
             }
 
@@ -212,7 +212,7 @@ namespace DriverUpdater
                 if ((ntStatus & 0x80000000) != 0)
                 {
                     Logging.Log("");
-                    Logging.Log($"RemoveOfflineDriver: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
+                    Logging.Log($"RemoveOfflineDriver: ntStatus=0x{ntStatus:X8}", Logging.LoggingLevel.Error);
 
                     return false;
                 }
@@ -264,7 +264,7 @@ namespace DriverUpdater
                     if ((ntStatus & 0x80000000) != 0)
                     {
                         Logging.Log("");
-                        Logging.Log($"AddOfflineDriver: ntStatus={ntStatus}, driverInf={inf}", Logging.LoggingLevel.Error);
+                        Logging.Log($"AddOfflineDriver: ntStatus=0x{ntStatus:X8}, driverInf={inf}", Logging.LoggingLevel.Error);
 
                         return false;
                     }
