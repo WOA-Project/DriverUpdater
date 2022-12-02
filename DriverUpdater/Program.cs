@@ -70,10 +70,13 @@ namespace DriverUpdater
 
             try
             {
-                Install(Definition, DriverRepo, DevicePart, IntegratePostUpgrade, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64);
+                bool result = Install(Definition, DriverRepo, DevicePart, IntegratePostUpgrade, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64);
 
-                Logging.Log("Fixing potential registry left overs");
-                new RegistryFixer(DevicePart).FixRegistryPaths();
+                if (result)
+                {
+                    Logging.Log("Fixing potential registry left overs");
+                    new RegistryFixer(DevicePart).FixRegistryPaths();
+                }
             }
             catch (Exception ex)
             {
@@ -151,7 +154,7 @@ namespace DriverUpdater
             return result;
         }
 
-        private static void Install(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, ProcessorArchitecture _)
+        private static bool Install(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, ProcessorArchitecture _)
         {
             Logging.Log("Reading definition file...");
 
@@ -179,7 +182,7 @@ namespace DriverUpdater
                 if (!Directory.Exists($"{DriverRepo}\\{path}"))
                 {
                     Logging.Log($"A component package was not found: {DriverRepo}\\{path}", Logging.LoggingLevel.Error);
-                    return;
+                    return false;
                 }
             }
 
@@ -192,7 +195,7 @@ namespace DriverUpdater
             if ((ntStatus & 0x80000000) != 0)
             {
                 Logging.Log($"DriverStoreOfflineEnumDriverPackage: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
-                return;
+                return false;
             }
 
             Logging.Log("Uninstalling drivers...");
@@ -211,7 +214,7 @@ namespace DriverUpdater
                     Logging.Log("");
                     Logging.Log($"RemoveOfflineDriver: ntStatus={ntStatus}", Logging.LoggingLevel.Error);
 
-                    return;
+                    return false;
                 }
             }
             Logging.ShowProgress(existingDrivers.Length, existingDrivers.Length, startTime, false);
@@ -263,12 +266,14 @@ namespace DriverUpdater
                         Logging.Log("");
                         Logging.Log($"AddOfflineDriver: ntStatus={ntStatus}, driverInf={inf}", Logging.LoggingLevel.Error);
 
-                        return;
+                        return false;
                     }
                 }
                 Logging.ShowProgress(infs.Count(), infs.Count(), startTime, false);
                 Logging.Log("");
             }
+
+            return true;
         }
     }
 }
