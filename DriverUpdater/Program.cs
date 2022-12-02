@@ -245,7 +245,7 @@ namespace DriverUpdater
                            Invalid ARG can be thrown when an issue happens with a specific driver inf
                            No investigation done yet, but for now, this will do just fine
                         */
-                        if (ntStatus == 0x80070057)
+                        if ((ntStatus & 0x80000000) != 0)
                         {
                             currentFails++;
                         }
@@ -266,6 +266,9 @@ namespace DriverUpdater
                 Logging.ShowProgress(infs.Count(), infs.Count(), startTime, false);
                 Logging.Log("");
             }
+
+            Logging.Log("Fixing potential registry left overs");
+            new RegistryFixer(DevicePart).FixRegistryPaths();
         }
     }
 }
