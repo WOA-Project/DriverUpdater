@@ -61,11 +61,15 @@ namespace DriverUpdater
                                 if (regex.IsMatch(og))
                                 {
                                     string currentValue = regex.Match(og).Value;
-                                    Logging.Log($"Updated {currentValue} to {matchingString} in {registryKey.Name}\\{registryValue}");
 
-                                    og = og.Replace(currentValue, matchingString);
-                                    registryKey.SetValue(registryValue, og, RegistryValueType.String);
-                                    break;
+                                    if (currentValue != matchingString)
+                                    {
+                                        Logging.Log($"Updated {currentValue} to {matchingString} in {registryKey.Name}\\{registryValue}");
+
+                                        og = og.Replace(currentValue, matchingString);
+                                        registryKey.SetValue(registryValue, og, RegistryValueType.String);
+                                        break;
+                                    }
                                 }
                             }
 
@@ -83,11 +87,15 @@ namespace DriverUpdater
                                 if (regex.IsMatch(og))
                                 {
                                     string currentValue = regex.Match(og).Value;
-                                    Logging.Log($"Updated {currentValue} to {matchingString} in {registryKey.Name}\\{registryValue}");
 
-                                    og = og.Replace(currentValue, matchingString);
-                                    registryKey.SetValue(registryValue, og, RegistryValueType.ExpandString);
-                                    break;
+                                    if (currentValue != matchingString)
+                                    {
+                                        Logging.Log($"Updated {currentValue} to {matchingString} in {registryKey.Name}\\{registryValue}");
+
+                                        og = og.Replace(currentValue, matchingString);
+                                        registryKey.SetValue(registryValue, og, RegistryValueType.ExpandString);
+                                        break;
+                                    }
                                 }
                             }
 
@@ -111,12 +119,16 @@ namespace DriverUpdater
                                     if (regex.IsMatch(og))
                                     {
                                         string currentValue = regex.Match(og).Value;
-                                        Logging.Log($"Updated {currentValue} to {matchingString} in {registryKey.Name}\\{registryValue}");
 
-                                        og = og.Replace(currentValue, matchingString);
-                                        ogvals[j] = og;
-                                        updated = true;
-                                        break;
+                                        if (currentValue != matchingString)
+                                        {
+                                            Logging.Log($"Updated {currentValue} to {matchingString} in {registryKey.Name}\\{registryValue}");
+
+                                            og = og.Replace(currentValue, matchingString);
+                                            ogvals[j] = og;
+                                            updated = true;
+                                            break;
+                                        }
                                     }
                                 }
                             }

@@ -71,6 +71,9 @@ namespace DriverUpdater
             try
             {
                 Install(Definition, DriverRepo, DevicePart, IntegratePostUpgrade, IsARM ? ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM : ProcessorArchitecture.PROCESSOR_ARCHITECTURE_ARM64);
+
+                Logging.Log("Fixing potential registry left overs");
+                new RegistryFixer(DevicePart).FixRegistryPaths();
             }
             catch (Exception ex)
             {
@@ -266,9 +269,6 @@ namespace DriverUpdater
                 Logging.ShowProgress(infs.Count(), infs.Count(), startTime, false);
                 Logging.Log("");
             }
-
-            Logging.Log("Fixing potential registry left overs");
-            new RegistryFixer(DevicePart).FixRegistryPaths();
         }
     }
 }
