@@ -99,7 +99,7 @@ namespace DriverUpdater
                         break;
                     case LoggingLevel.Information:
                         msg = "Information";
-                        Console.ForegroundColor = ConsoleColor.White;
+                        Console.ForegroundColor = originalConsoleColor;
                         break;
                 }
 
