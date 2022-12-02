@@ -83,6 +83,8 @@ namespace DriverUpdater
                     return;
                 }
 
+                ConsoleColor originalConsoleColor = Console.ForegroundColor;
+
                 string msg = "";
 
                 switch (severity)
@@ -110,7 +112,7 @@ namespace DriverUpdater
                     Console.Write("\r" + DateTime.Now.ToString("'['HH':'mm':'ss']'") + "[" + msg + "] " + message);
                 }
 
-                Console.ForegroundColor = ConsoleColor.White;
+                Console.ForegroundColor = originalConsoleColor;
             }
         }
     }
