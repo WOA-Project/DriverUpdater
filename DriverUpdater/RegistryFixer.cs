@@ -26,7 +26,7 @@ namespace DriverUpdater
 
             // First start by getting a list of all driver folder names right now.
             string DriverStorePath = Path.Combine(DrivePath, "Windows\\System32\\DriverStore\\FileRepository");
-            string[] Folders = Directory.EnumerateDirectories(DriverStorePath).Select(x => x.Split('\\').Last()).ToArray();
+            string[] Folders = Directory.EnumerateDirectories(DriverStorePath).Where(x => Directory.EnumerateFiles(x, "*.cat").Any()).Select(x => x.Split('\\').Last()).ToArray();
 
             // Now, create a new array of all folder names, but without the hash dependent part.
             Regex[] folderRegexes = Folders.Select(x => BuildRegexForDriverStoreFolderName(x)).ToArray();
