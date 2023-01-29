@@ -76,6 +76,8 @@ namespace DriverUpdater
                 {
                     Logging.Log("Fixing potential registry left overs");
                     new RegistryFixer(DevicePart).FixRegistryPaths();
+                    Logging.Log("Enabling Cks");
+                    new CksLicensing(DevicePart).SetLicensedState();
                 }
             }
             catch (Exception ex)
