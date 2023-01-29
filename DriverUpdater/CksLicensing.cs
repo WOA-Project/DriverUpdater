@@ -74,6 +74,7 @@ namespace DriverUpdater
                         FileMode.Open,
                         FileAccess.ReadWrite
                     ), DiscUtils.Streams.Ownership.Dispose);
+
                 RegistryKey key = hive.Root.OpenSubKey("ControlSet001\\Control\\ProductOptions");
                 byte[] value = (byte[])key.GetValue("ProductPolicy");
 
@@ -125,6 +126,12 @@ namespace DriverUpdater
                 {
                     key.SetValue("ProductPolicy", value);
                 }
+
+                key = hive.Root.OpenSubKey("ControlSet001\\Control\\CI\\Protected");
+                key.SetValue("Licensed", 0x00000001);
+
+                key = hive.Root.OpenSubKey("ControlSet001\\Control\\CI\\Policy");
+                key.SetValue("WhqlSettings", 0x00000001);
             }
             catch
             {
