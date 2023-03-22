@@ -56,12 +56,27 @@ namespace DriverUpdater
 
         private static void DriverUpdaterAction(string Definition, string DriverRepo, string DevicePart, bool IntegratePostUpgrade, bool IsARM)
         {
-            if (!File.Exists(Definition) || !Directory.Exists(DriverRepo) || !Directory.Exists(DevicePart))
+            if (!File.Exists(Definition))
             {
-                Logging.Log("The tool detected one of the provided paths does not exist. Recheck your parameters and try again.", Logging.LoggingLevel.Error);
+                Logging.Log($"The tool detected one of the provided paths does not exist ({Definition}). Recheck your parameters and try again.", Logging.LoggingLevel.Error);
                 Logging.Log("Usage: DriverUpdater <Path to definition> <Path to Driver repository> <Path to Device partition>");
                 return;
             }
+
+            if (!Directory.Exists(DriverRepo))
+            {
+                Logging.Log($"The tool detected one of the provided paths does not exist ({DriverRepo}). Recheck your parameters and try again.", Logging.LoggingLevel.Error);
+                Logging.Log("Usage: DriverUpdater <Path to definition> <Path to Driver repository> <Path to Device partition>");
+                return;
+            }
+
+            if (!Directory.Exists(DevicePart))
+            {
+                Logging.Log($"The tool detected one of the provided paths does not exist ({DevicePart}). Recheck your parameters and try again.", Logging.LoggingLevel.Error);
+                Logging.Log("Usage: DriverUpdater <Path to definition> <Path to Driver repository> <Path to Device partition>");
+                return;
+            }
+
 
             if (!IntegratePostUpgrade)
             {
