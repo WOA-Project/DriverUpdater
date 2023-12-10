@@ -27,18 +27,21 @@ namespace DriverUpdater
     internal class CLIOptions
     {
         [Option('d', "definition-file", HelpText = "The path to the definition file to use.", Required = true)]
-        public string DefinitionFile { get; set; }
+        public string DefinitionFile
+        {
+            get; set;
+        }
 
         [Option('r', "repository-path", HelpText = "The path to the driver repository.", Required = true)]
-        public string RepositoryPath { get; set; }
+        public string RepositoryPath
+        {
+            get; set;
+        }
 
         [Option('p', "phone-path", HelpText = "The path to the phone's Windows Installation.", Required = true)]
-        public string PhonePath { get; set; }
-
-        [Option('a', "is-arm32", HelpText = "Indicates the target runs an ARM32 Windows Operating System (EOL)", Required = false, Default = false)]
-        public bool IsARM { get; set; }
-
-        [Option('n', "no-integratepostupgrade", HelpText = "Indicates to not provision the target device for post upgrade tasks", Required = false, Default = false)]
-        public bool NoIntegratePostUpgrade { get; set; }
+        public string PhonePath
+        {
+            get; set;
+        }
     }
 }
