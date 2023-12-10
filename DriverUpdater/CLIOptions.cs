@@ -38,7 +38,7 @@ namespace DriverUpdater
             get; set;
         }
 
-        [Option('p', "phone-path", HelpText = "The path to the phone's Windows Installation.", Required = true)]
+        [Option('p', "phone-path", HelpText = "The path to the phone's Windows Installation for offline use.", Required = false)]
         public string PhonePath
         {
             get; set;

@@ -151,7 +151,7 @@ namespace DriverUpdater
                     Logging.Log("");
                     Logging.Log($"DismApi->AddProvisionedAppxPackage: ntStatus=0x{ntStatus:X8}, app={app}", Logging.LoggingLevel.Error);
 
-                    return false;
+                    //return false;
                 }
             }
 
@@ -208,7 +208,7 @@ namespace DriverUpdater
                         Logging.Log("");
                         Logging.Log($"DismApi->AddDriver: ntStatus=0x{ntStatus:X8}, driverInf={inf}", Logging.LoggingLevel.Error);
 
-                        return false;
+                        //return false;
                     }
                 }
                 Logging.ShowProgress(infFiles.Count(), infFiles.Count(), startTime, false);
@@ -264,7 +264,7 @@ namespace DriverUpdater
                     Logging.Log("");
                     Logging.Log($"DismApi->AddProvisionedAppxPackage: ntStatus=0x{ntStatus:X8}, app={app}", Logging.LoggingLevel.Error);
 
-                    return false;
+                    //return false;
                 }
             }
 

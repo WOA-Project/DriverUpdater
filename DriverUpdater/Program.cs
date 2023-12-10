@@ -70,21 +70,36 @@ namespace DriverUpdater
                 return;
             }
 
-            if (!Directory.Exists(DevicePart))
+            if (!string.IsNullOrEmpty(DevicePart))
             {
-                Logging.Log($"The tool detected one of the provided paths does not exist ({DevicePart}). Recheck your parameters and try again.", Logging.LoggingLevel.Error);
-                Logging.Log("Usage: DriverUpdater <Path to definition> <Path to Driver repository> <Path to Device partition>");
-                return;
-            }
+                if (!Directory.Exists(DevicePart))
+                {
+                    Logging.Log($"The tool detected one of the provided paths does not exist ({DevicePart}). Recheck your parameters and try again.", Logging.LoggingLevel.Error);
+                    Logging.Log("Usage: DriverUpdater <Path to definition> <Path to Driver repository> <Path to Device partition>");
+                    return;
+                }
 
-            try
-            {
-                _ = Install(Definition, DriverRepo, DevicePart);
+                try
+                {
+                    _ = Install(Definition, DriverRepo, DevicePart);
+                }
+                catch (Exception ex)
+                {
+                    Logging.Log("Something happened!", Logging.LoggingLevel.Error);
+                    Logging.Log(ex.ToString(), Logging.LoggingLevel.Error);
+                }
             }
-            catch (Exception ex)
+            else
             {
-                Logging.Log("Something happened!", Logging.LoggingLevel.Error);
-                Logging.Log(ex.ToString(), Logging.LoggingLevel.Error);
+                try
+                {
+                    _ = OnlineInstall(Definition, DriverRepo);
+                }
+                catch (Exception ex)
+                {
+                    Logging.Log("Something happened!", Logging.LoggingLevel.Error);
+                    Logging.Log(ex.ToString(), Logging.LoggingLevel.Error);
+                }
             }
 
             Logging.Log("Done!");
@@ -116,7 +131,7 @@ namespace DriverUpdater
             {
                 if (!Directory.Exists($"{DriverRepo}\\{path}"))
                 {
-                    Logging.Log($"An apps package was not found: {DriverRepo}\\{path}", Logging.LoggingLevel.Error);
+                    Logging.Log($"An app package was not found: {DriverRepo}\\{path}", Logging.LoggingLevel.Error);
                     return false;
                 }
             }
@@ -131,6 +146,47 @@ namespace DriverUpdater
             List<string> deps = GetAppPackages(DriverRepo, appPaths);
 
             return dismProvider.InstallDepApps(deps) && dismProvider.InstallApps(deps);
+        }
+
+        private static bool OnlineInstall(string Definition, string DriverRepo)
+        {
+            Logging.Log("Reading definition file...");
+            DefinitionParser definitionParser = new(Definition);
+
+            // This gets us the list of driver packages to install on the device
+            ReadOnlyCollection<string> definitionPaths = definitionParser.DriverDirectories;
+
+            // Ensure everything exists
+            foreach (string path in definitionPaths)
+            {
+                if (!Directory.Exists($"{DriverRepo}\\{path}"))
+                {
+                    Logging.Log($"A component package was not found: {DriverRepo}\\{path}", Logging.LoggingLevel.Error);
+                    return false;
+                }
+            }
+
+            // This gets us the list of app packages to install on the device
+            ReadOnlyCollection<string> appPaths = definitionParser.AppDirectories;
+
+            // Ensure everything exists
+            foreach (string path in appPaths)
+            {
+                if (!Directory.Exists($"{DriverRepo}\\{path}"))
+                {
+                    Logging.Log($"An app package was not found: {DriverRepo}\\{path}", Logging.LoggingLevel.Error);
+                    return false;
+                }
+            }
+
+            if (!OnlineProvider.OnlineInstallDrivers(DriverRepo, definitionPaths))
+            {
+                return false;
+            }
+
+            List<string> deps = GetAppPackages(DriverRepo, appPaths);
+
+            return OnlineProvider.OnlineInstallDepApps(deps) && OnlineProvider.OnlineInstallApps(deps);
         }
 
         private static List<string> GetAppPackages(string DriverRepo, ReadOnlyCollection<string> appPaths)
