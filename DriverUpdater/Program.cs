@@ -34,7 +34,7 @@ namespace DriverUpdater
         private static void PrintLogo()
         {
             Logging.Log($"DriverUpdater {Assembly.GetExecutingAssembly().GetName().Version} - Cleans and Installs a new set of drivers onto a Windows Image");
-            Logging.Log("Copyright (c) 2017-2021, The LumiaWOA and DuoWOA Authors");
+            Logging.Log("Copyright (c) 2017-2023, The LumiaWOA and DuoWOA Authors");
             Logging.Log("https://github.com/WOA-Project/DriverUpdater");
             Logging.Log("");
             Logging.Log("This program comes with ABSOLUTELY NO WARRANTY.");
