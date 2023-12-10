@@ -163,6 +163,38 @@ namespace DriverUpdater
 
         public bool InstallDrivers(string DriverRepo, ReadOnlyCollection<string> definitionPaths)
         {
+            Logging.Log("Enumerating existing drivers...");
+
+            uint ntStatus = GetInstalledOEMDrivers(out string[] existingDrivers);
+
+            if ((ntStatus & 0x80000000) != 0)
+            {
+                Logging.Log($"DriverStoreOfflineEnumDriverPackage: ntStatus=0x{ntStatus:X8}", Logging.LoggingLevel.Error);
+                return false;
+            }
+
+            Logging.Log("Uninstalling drivers...");
+
+            long Progress = 0;
+            DateTime startTime = DateTime.Now;
+
+            foreach (string driver in existingDrivers)
+            {
+                Console.Title = $"Driver Updater - RemoveOfflineDriver - {driver}";
+                Logging.ShowProgress(Progress++, existingDrivers.Length, startTime, false);
+
+                ntStatus = RemoveOfflineDriver(driver);
+                if ((ntStatus & 0x80000000) != 0)
+                {
+                    Logging.Log("");
+                    Logging.Log($"RemoveOfflineDriver: ntStatus=0x{ntStatus:X8}, driver={driver}", Logging.LoggingLevel.Error);
+
+                    return false;
+                }
+            }
+            Logging.ShowProgress(existingDrivers.Length, existingDrivers.Length, startTime, false);
+            Logging.Log("");
+
             Logging.Log("Installing new drivers...");
 
             foreach (string path in definitionPaths)
@@ -173,8 +205,8 @@ namespace DriverUpdater
                 IEnumerable<string> infFiles = Directory.EnumerateFiles($"{DriverRepo}\\{path}", "*.inf", SearchOption.AllDirectories)
                     .Where(x => x.EndsWith(".inf", StringComparison.InvariantCultureIgnoreCase));
 
-                long Progress = 0;
-                DateTime startTime = DateTime.Now;
+                Progress = 0;
+                startTime = DateTime.Now;
 
                 // Install every inf present in the component folder
                 foreach (string inf in infFiles)
@@ -185,7 +217,7 @@ namespace DriverUpdater
 
                     const int maxAttempts = 3;
                     int currentFails = 0;
-                    ulong ntStatus = 0;
+                    ntStatus = 0;
 
                     while (currentFails < maxAttempts)
                     {

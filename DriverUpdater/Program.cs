@@ -23,6 +23,7 @@ using CommandLine;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -81,7 +82,15 @@ namespace DriverUpdater
 
                 try
                 {
-                    _ = Install(Definition, DriverRepo, DevicePart);
+                    bool result = Install(Definition, DriverRepo, DevicePart);
+
+                    if (result)
+                    {
+                        Logging.Log("Fixing potential registry left overs");
+                        new RegistryFixer(DevicePart).FixRegistryPaths();
+                        Logging.Log("Enabling Cks");
+                        new CksLicensing(DevicePart).SetLicensedState();
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -103,6 +112,73 @@ namespace DriverUpdater
             }
 
             Logging.Log("Done!");
+        }
+
+        private static bool ResealForPnPFirstBootUxInternal(string DevicePart)
+        {
+            using FileStream file = File.Open(Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM"), FileMode.Open, FileAccess.ReadWrite);
+            using DiscUtils.Registry.RegistryHive hive = new(file, DiscUtils.Streams.Ownership.Dispose);
+            DiscUtils.Registry.RegistryKey hwconf = hive.Root.OpenSubKey("HardwareConfig");
+            if (hwconf != null)
+            {
+                Logging.Log("Resealing image to PnP FirstBootUx...");
+                foreach (string subkey in hwconf.GetSubKeyNames())
+                {
+                    hwconf.DeleteSubKeyTree(subkey);
+                }
+
+                foreach (string subval in hwconf.GetValueNames())
+                {
+                    hwconf.DeleteValue(subval);
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool ResealForPnPFirstBootUx(string DevicePart)
+        {
+            bool result = false;
+            try
+            {
+                result = ResealForPnPFirstBootUxInternal(DevicePart);
+            }
+            catch (NotImplementedException)
+            {
+                using Process proc = new()
+                {
+                    StartInfo = new ProcessStartInfo("reg.exe", $"load HKLM\\DriverUpdater {Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM")}")
+                    {
+                        UseShellExecute = false
+                    }
+                };
+                proc.Start();
+                proc.WaitForExit();
+                if (proc.ExitCode != 0)
+                {
+                    throw new Exception("Couldn't load registry hive");
+                }
+
+                using Process proc2 = new()
+                {
+                    StartInfo = new ProcessStartInfo("reg.exe", "unload HKLM\\DriverUpdater")
+                    {
+                        UseShellExecute = false
+                    }
+                };
+                proc2.Start();
+                proc2.WaitForExit();
+                if (proc2.ExitCode != 0)
+                {
+                    throw new Exception("Couldn't unload registry hive");
+                }
+
+                result = ResealForPnPFirstBootUxInternal(DevicePart);
+            }
+
+            return result;
         }
 
         private static bool Install(string Definition, string DriverRepo, string DrivePath)
