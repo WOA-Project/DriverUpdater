@@ -22,6 +22,7 @@
 using CommandLine;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -74,20 +75,28 @@ namespace DriverUpdater
                 if (!Directory.Exists(DevicePart))
                 {
                     Logging.Log($"The tool detected one of the provided paths does not exist ({DevicePart}). Recheck your parameters and try again.", Logging.LoggingLevel.Error);
+                    Logging.Log("It's also possible the drive {DevicePart} is not the mounted phone but a left over ghosted partition. " +
+                        "Try assigning another letter if the drive is ghosted using diskpart. " +
+                        "A ghosted drive is a drive still mounted but not pointing to anything and showing errors when opening it.", Logging.LoggingLevel.Warning);
                     Logging.Log("Usage: DriverUpdater <Path to definition> <Path to Driver repository> <Path to Device partition>");
                     return;
                 }
 
                 try
                 {
-                    bool result = Install(Definition, DriverRepo, DevicePart);
+                    bool result = ResealForPnPFirstBootUx(DevicePart);
 
                     if (result)
                     {
-                        Logging.Log("Fixing potential registry left overs");
-                        new RegistryFixer(DevicePart).FixRegistryPaths();
-                        Logging.Log("Enabling Cks");
-                        new CksLicensing(DevicePart).SetLicensedState();
+                        result = Install(Definition, DriverRepo, DevicePart);
+
+                        if (result)
+                        {
+                            Logging.Log("Fixing potential registry left overs");
+                            new RegistryFixer(DevicePart).FixRegistryPaths();
+                            Logging.Log("Enabling Cks");
+                            new CksLicensing(DevicePart).SetLicensedState();
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -110,6 +119,73 @@ namespace DriverUpdater
             }
 
             Logging.Log("Done!");
+        }
+
+        private static bool ResealForPnPFirstBootUxInternal(string DevicePart)
+        {
+            using FileStream file = File.Open(Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM"), FileMode.Open, FileAccess.ReadWrite);
+            using DiscUtils.Registry.RegistryHive hive = new(file, DiscUtils.Streams.Ownership.Dispose);
+            DiscUtils.Registry.RegistryKey hwconf = hive.Root.OpenSubKey("HardwareConfig");
+            if (hwconf != null)
+            {
+                Logging.Log("Resealing image to PnP FirstBootUx...");
+                foreach (string subkey in hwconf.GetSubKeyNames())
+                {
+                    hwconf.DeleteSubKeyTree(subkey);
+                }
+
+                foreach (string subval in hwconf.GetValueNames())
+                {
+                    hwconf.DeleteValue(subval);
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool ResealForPnPFirstBootUx(string DevicePart)
+        {
+            bool result = false;
+            try
+            {
+                result = ResealForPnPFirstBootUxInternal(DevicePart);
+            }
+            catch (NotImplementedException)
+            {
+                using Process proc = new()
+                {
+                    StartInfo = new ProcessStartInfo("reg.exe", $"load HKLM\\DriverUpdater {Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM")}")
+                    {
+                        UseShellExecute = false
+                    }
+                };
+                _ = proc.Start();
+                proc.WaitForExit();
+                if (proc.ExitCode != 0)
+                {
+                    throw new Exception("Couldn't load registry hive");
+                }
+
+                using Process proc2 = new()
+                {
+                    StartInfo = new ProcessStartInfo("reg.exe", "unload HKLM\\DriverUpdater")
+                    {
+                        UseShellExecute = false
+                    }
+                };
+                _ = proc2.Start();
+                proc2.WaitForExit();
+                if (proc2.ExitCode != 0)
+                {
+                    throw new Exception("Couldn't unload registry hive");
+                }
+
+                result = ResealForPnPFirstBootUxInternal(DevicePart);
+            }
+
+            return result;
         }
 
         private static bool Install(string Definition, string DriverRepo, string DrivePath)
