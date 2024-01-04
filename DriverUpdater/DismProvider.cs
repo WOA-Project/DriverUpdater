@@ -77,7 +77,7 @@ namespace DriverUpdater
                 ntStatus = (uint)e.HResult;
             }
 
-            existingDrivers = lexistingDrivers.ToArray();
+            existingDrivers = [.. lexistingDrivers];
 
             return ntStatus;
         }

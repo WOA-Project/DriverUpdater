@@ -13,7 +13,6 @@
     <PackageReference Include="CommandLineParser" Version="2.9.1" />
     <PackageReference Include="Microsoft.Dism" Version="3.0.0" />
     <PackageReference Include="Quamotion.DiscUtils.Registry" Version="0.15.4" />
-	  <PackageReference Include="ini-parser-netcore" Version="3.0.0" />
   </ItemGroup>
 
 </Project>

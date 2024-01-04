@@ -34,7 +34,7 @@ namespace DriverUpdater
                 list.Add(i);
             }
 
-            return list.Count == 0 ? Empty : list.ToArray();
+            return list.Count == 0 ? Empty : [.. list];
         }
 
         private static bool IsMatch(byte[] array, int position, byte[] candidate)
