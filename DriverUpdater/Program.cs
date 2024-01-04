@@ -22,7 +22,6 @@
 using CommandLine;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -186,42 +185,71 @@ namespace DriverUpdater
             Logging.Log("Reading definition file...");
             DefinitionParser definitionParser = new(Definition);
 
+            bool everythingExists = true;
+
             // This gets us the list of driver packages to install on the device
-            ReadOnlyCollection<string> definitionPaths = definitionParser.DriverDirectories;
+            IEnumerable<string> driverPathsToInstall = definitionParser
+                .FeatureManifest
+                .Drivers
+                .BaseDriverPackages
+                .DriverPackageFile
+                .Select(x => Path.Join(x.Path
+                .Replace("$(mspackageroot)", DriverRepo)
+                .Replace("$(cputype)", "ARM64") // Hardcoded for now
+                .Replace("$(buildtype)", "fre"),
+                x.Name));
 
             // Ensure everything exists
-            foreach (string path in definitionPaths)
+            foreach (string path in driverPathsToInstall)
             {
-                if (!Directory.Exists($"{DriverRepo}\\{path}"))
+                if (!File.Exists(path))
                 {
-                    Logging.Log($"A component package was not found: {DriverRepo}\\{path}", Logging.LoggingLevel.Error);
-                    return false;
+                    Logging.Log($"A driver package was not found: {path}", Logging.LoggingLevel.Error);
+                    everythingExists = false;
                 }
             }
 
             // This gets us the list of app packages to install on the device
-            ReadOnlyCollection<string> appPaths = definitionParser.AppDirectories;
+            IEnumerable<(string, string)> appPaths = definitionParser
+                .FeatureManifest
+                .AppX
+                .AppXPackages
+                .PackageFile
+                .Select(x =>
+                {
+                    string cleanedPath = x.Path
+                                    .Replace("$(mspackageroot)", DriverRepo)
+                                    .Replace("$(cputype)", "ARM64") // Hardcoded for now
+                                    .Replace("$(buildtype)", "fre");
+
+                    return (Path.Join(cleanedPath, x.Name), !string.IsNullOrEmpty(x.LicenseFile) ? Path.Join(cleanedPath, x.LicenseFile) : "");
+                });
 
             // Ensure everything exists
-            foreach (string path in appPaths)
+            foreach ((string path, string license) in appPaths)
             {
-                if (!Directory.Exists($"{DriverRepo}\\{path}"))
+                if (!File.Exists(path))
                 {
-                    Logging.Log($"An app package was not found: {DriverRepo}\\{path}", Logging.LoggingLevel.Error);
-                    return false;
+                    Logging.Log($"An app package was not found: {path}", Logging.LoggingLevel.Error);
+                    everythingExists = false;
+                }
+
+                if (!string.IsNullOrEmpty(license) && !File.Exists(license))
+                {
+                    Logging.Log($"An app package was not found: {license}", Logging.LoggingLevel.Error);
+                    everythingExists = false;
                 }
             }
 
-            using DismProvider dismProvider = new(DrivePath);
-
-            if (!dismProvider.InstallDrivers(DriverRepo, definitionPaths))
+            if (!everythingExists)
             {
                 return false;
             }
 
-            List<string> deps = GetAppPackages(DriverRepo, appPaths);
+            using DismProvider dismProvider = new(DrivePath);
 
-            return dismProvider.InstallDepApps(deps) && dismProvider.InstallApps(deps);
+            return dismProvider.InstallDrivers(DriverRepo, driverPathsToInstall)
+&& dismProvider.InstallDepApps(appPaths) && dismProvider.InstallApps(appPaths);
         }
 
         private static bool OnlineInstall(string Definition, string DriverRepo)
@@ -229,64 +257,67 @@ namespace DriverUpdater
             Logging.Log("Reading definition file...");
             DefinitionParser definitionParser = new(Definition);
 
+            bool everythingExists = true;
+
             // This gets us the list of driver packages to install on the device
-            ReadOnlyCollection<string> definitionPaths = definitionParser.DriverDirectories;
+            IEnumerable<string> driverPathsToInstall = definitionParser
+                .FeatureManifest
+                .Drivers
+                .BaseDriverPackages
+                .DriverPackageFile
+                .Select(x => Path.Join(x.Path
+                .Replace("$(mspackageroot)", DriverRepo)
+                .Replace("$(cputype)", "ARM64") // Hardcoded for now
+                .Replace("$(buildtype)", "fre"),
+                x.Name));
 
             // Ensure everything exists
-            foreach (string path in definitionPaths)
+            foreach (string path in driverPathsToInstall)
             {
-                if (!Directory.Exists($"{DriverRepo}\\{path}"))
+                if (!File.Exists(path))
                 {
-                    Logging.Log($"A component package was not found: {DriverRepo}\\{path}", Logging.LoggingLevel.Error);
-                    return false;
+                    Logging.Log($"A driver package was not found: {path}", Logging.LoggingLevel.Error);
+                    everythingExists = false;
                 }
             }
 
             // This gets us the list of app packages to install on the device
-            ReadOnlyCollection<string> appPaths = definitionParser.AppDirectories;
+            IEnumerable<(string, string)> appPaths = definitionParser
+                .FeatureManifest
+                .AppX
+                .AppXPackages
+                .PackageFile
+                .Select(x =>
+                {
+                    string cleanedPath = x.Path
+                                    .Replace("$(mspackageroot)", DriverRepo)
+                                    .Replace("$(cputype)", "ARM64") // Hardcoded for now
+                                    .Replace("$(buildtype)", "fre");
+
+                    return (Path.Join(cleanedPath, x.Name), !string.IsNullOrEmpty(x.LicenseFile) ? Path.Join(cleanedPath, x.LicenseFile) : "");
+                });
 
             // Ensure everything exists
-            foreach (string path in appPaths)
+            foreach ((string path, string license) in appPaths)
             {
-                if (!Directory.Exists($"{DriverRepo}\\{path}"))
+                if (!File.Exists(path))
                 {
-                    Logging.Log($"An app package was not found: {DriverRepo}\\{path}", Logging.LoggingLevel.Error);
-                    return false;
+                    Logging.Log($"An app package was not found: {path}", Logging.LoggingLevel.Error);
+                    everythingExists = false;
+                }
+
+                if (!string.IsNullOrEmpty(license) && !File.Exists(license))
+                {
+                    Logging.Log($"An app package was not found: {license}", Logging.LoggingLevel.Error);
+                    everythingExists = false;
                 }
             }
 
-            if (!OnlineProvider.OnlineInstallDrivers(DriverRepo, definitionPaths))
-            {
-                return false;
-            }
-
-            List<string> deps = GetAppPackages(DriverRepo, appPaths);
-
-            return OnlineProvider.OnlineInstallDepApps(deps) && OnlineProvider.OnlineInstallApps(deps);
-        }
-
-        private static List<string> GetAppPackages(string DriverRepo, ReadOnlyCollection<string> appPaths)
-        {
-            List<string> deps = [];
-
-            foreach (string path in appPaths)
-            {
-                IEnumerable<string> appxs = Directory.EnumerateFiles($"{DriverRepo}\\{path}", "*.appx", SearchOption.AllDirectories)
-                    .Where(x => x.EndsWith(".appx", StringComparison.InvariantCultureIgnoreCase));
-                IEnumerable<string> msixs = Directory.EnumerateFiles($"{DriverRepo}\\{path}", "*.msix", SearchOption.AllDirectories)
-                    .Where(x => x.EndsWith(".msix", StringComparison.InvariantCultureIgnoreCase));
-                IEnumerable<string> appxbundles = Directory.EnumerateFiles($"{DriverRepo}\\{path}", "*.appxbundle", SearchOption.AllDirectories)
-                    .Where(x => x.EndsWith(".appxbundle", StringComparison.InvariantCultureIgnoreCase));
-                IEnumerable<string> msixbundles = Directory.EnumerateFiles($"{DriverRepo}\\{path}", "*.msixbundle", SearchOption.AllDirectories)
-                    .Where(x => x.EndsWith(".msixbundle", StringComparison.InvariantCultureIgnoreCase));
-
-                deps.AddRange(appxs);
-                deps.AddRange(msixs);
-                deps.AddRange(appxbundles);
-                deps.AddRange(msixbundles);
-            }
-
-            return deps;
+            return !everythingExists
+                ? false
+                : !OnlineProvider.OnlineInstallDrivers(DriverRepo, driverPathsToInstall)
+                ? false
+                : OnlineProvider.InstallDepApps(appPaths) && OnlineProvider.InstallApps(appPaths);
         }
     }
 }
