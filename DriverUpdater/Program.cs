@@ -248,8 +248,7 @@ namespace DriverUpdater
 
             using DismProvider dismProvider = new(DrivePath);
 
-            return dismProvider.InstallDrivers(DriverRepo, driverPathsToInstall)
-&& dismProvider.InstallDepApps(appPaths) && dismProvider.InstallApps(appPaths);
+            return dismProvider.InstallDrivers(DriverRepo, driverPathsToInstall) && dismProvider.InstallDepApps(appPaths) && dismProvider.InstallApps(appPaths);
         }
 
         private static bool OnlineInstall(string Definition, string DriverRepo)
@@ -313,11 +312,7 @@ namespace DriverUpdater
                 }
             }
 
-            return !everythingExists
-                ? false
-                : !OnlineProvider.OnlineInstallDrivers(DriverRepo, driverPathsToInstall)
-                ? false
-                : OnlineProvider.InstallDepApps(appPaths) && OnlineProvider.InstallApps(appPaths);
+            return everythingExists && OnlineProvider.OnlineInstallDrivers(driverPathsToInstall) && OnlineProvider.OnlineInstallDepApps(appPaths) && OnlineProvider.OnlineInstallApps(appPaths);
         }
     }
 }
