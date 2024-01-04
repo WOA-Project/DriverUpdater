@@ -6,7 +6,7 @@ namespace DriverUpdater
 {
     internal class CksLicensing
     {
-        private string DrivePath = "";
+        private readonly string DrivePath = "";
 
         public CksLicensing(string DrivePath)
         {
@@ -22,7 +22,7 @@ namespace DriverUpdater
                 return Empty;
             }
 
-            List<int>? list = new();
+            List<int>? list = [];
 
             for (int i = 0; i < self.Length; i++)
             {

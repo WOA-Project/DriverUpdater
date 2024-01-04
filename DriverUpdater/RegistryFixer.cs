@@ -8,7 +8,7 @@ namespace DriverUpdater
 {
     public class RegistryFixer
     {
-        private string DrivePath = "";
+        private readonly string DrivePath = "";
 
         public RegistryFixer(string DrivePath)
         {
@@ -29,10 +29,10 @@ namespace DriverUpdater
             string[] Folders = Directory.EnumerateDirectories(DriverStorePath).Where(x => Directory.EnumerateFiles(x, "*.cat").Any()).Select(x => x.Split('\\').Last()).ToArray();
 
             // Now, create a new array of all folder names, but without the hash dependent part.
-            Regex[] folderRegexes = Folders.Select(x => BuildRegexForDriverStoreFolderName(x)).ToArray();
+            Regex[] folderRegexes = Folders.Select(BuildRegexForDriverStoreFolderName).ToArray();
 
             // Now that this is done, process the hives.
-            ModifyRegistry(Path.Combine(DrivePath, "Windows\\System32\\config\\SYSTEM"), Path.Combine(DrivePath, "Windows\\System32\\config\\SOFTWARE"), Folders, folderRegexes);
+            _ = ModifyRegistry(Path.Combine(DrivePath, "Windows\\System32\\config\\SYSTEM"), Path.Combine(DrivePath, "Windows\\System32\\config\\SOFTWARE"), Folders, folderRegexes);
         }
 
         private static Regex BuildRegexForDriverStoreFolderName(string driverStoreFolderName)

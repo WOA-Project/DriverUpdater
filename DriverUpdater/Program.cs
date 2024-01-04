@@ -154,7 +154,7 @@ namespace DriverUpdater
                         UseShellExecute = false
                     }
                 };
-                proc.Start();
+                _ = proc.Start();
                 proc.WaitForExit();
                 if (proc.ExitCode != 0)
                 {
@@ -168,7 +168,7 @@ namespace DriverUpdater
                         UseShellExecute = false
                     }
                 };
-                proc2.Start();
+                _ = proc2.Start();
                 proc2.WaitForExit();
                 if (proc2.ExitCode != 0)
                 {
