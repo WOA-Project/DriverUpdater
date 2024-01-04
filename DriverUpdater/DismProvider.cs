@@ -154,7 +154,7 @@ namespace DriverUpdater
             return true;
         }
 
-        public bool InstallDrivers(string DriverRepo, IEnumerable<string> definitionPaths)
+        public bool InstallDrivers(IEnumerable<string> infFiles)
         {
             Logging.Log("Enumerating existing drivers...");
 
@@ -190,55 +190,46 @@ namespace DriverUpdater
 
             Logging.Log("Installing new drivers...");
 
-            foreach (string path in definitionPaths)
+            Progress = 0;
+            startTime = DateTime.Now;
+
+            // Install every inf present in the component folder
+            foreach (string inf in infFiles)
             {
-                Logging.Log(path);
+                // First add the driver package to the image
+                Console.Title = $"Driver Updater - DismApi->AddDriver - {inf}";
+                Logging.ShowProgress(Progress++, infFiles.Count(), startTime, false);
 
-                // The where LINQ call is because directory can return .inf_ as well...
-                IEnumerable<string> infFiles = Directory.EnumerateFiles($"{DriverRepo}\\{path}", "*.inf", SearchOption.AllDirectories)
-                    .Where(x => x.EndsWith(".inf", StringComparison.InvariantCultureIgnoreCase));
+                const int maxAttempts = 3;
+                int currentFails = 0;
+                ntStatus = 0;
 
-                Progress = 0;
-                startTime = DateTime.Now;
-
-                // Install every inf present in the component folder
-                foreach (string inf in infFiles)
+                while (currentFails < maxAttempts)
                 {
-                    // First add the driver package to the image
-                    Console.Title = $"Driver Updater - DismApi->AddDriver - {inf}";
-                    Logging.ShowProgress(Progress++, infFiles.Count(), startTime, false);
+                    ntStatus = AddOfflineDriver(inf);
 
-                    const int maxAttempts = 3;
-                    int currentFails = 0;
-                    ntStatus = 0;
-
-                    while (currentFails < maxAttempts)
-                    {
-                        ntStatus = AddOfflineDriver(inf);
-
-                        // Invalid ARG can be thrown when an issue happens with a specific driver inf
-                        // No investigation done yet, but for now, this will do just fine
-                        if ((ntStatus & 0x80000000) != 0)
-                        {
-                            currentFails++;
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-
+                    // Invalid ARG can be thrown when an issue happens with a specific driver inf
+                    // No investigation done yet, but for now, this will do just fine
                     if ((ntStatus & 0x80000000) != 0)
                     {
-                        Logging.Log("");
-                        Logging.Log($"DismApi->AddDriver: ntStatus=0x{ntStatus:X8}, driverInf={inf}", Logging.LoggingLevel.Error);
-
-                        //return false;
+                        currentFails++;
+                    }
+                    else
+                    {
+                        break;
                     }
                 }
-                Logging.ShowProgress(infFiles.Count(), infFiles.Count(), startTime, false);
-                Logging.Log("");
+
+                if ((ntStatus & 0x80000000) != 0)
+                {
+                    Logging.Log("");
+                    Logging.Log($"DismApi->AddDriver: ntStatus=0x{ntStatus:X8}, driverInf={inf}", Logging.LoggingLevel.Error);
+
+                    //return false;
+                }
             }
+            Logging.ShowProgress(infFiles.Count(), infFiles.Count(), startTime, false);
+            Logging.Log("");
 
             return true;
         }
