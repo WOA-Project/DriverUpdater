@@ -154,7 +154,7 @@ namespace DriverUpdater
             return true;
         }
 
-        public bool InstallDrivers(IEnumerable<string> infFiles)
+        public bool InstallDrivers(IEnumerable<string> infFiles, bool IsUpgrade)
         {
             Logging.Log("Enumerating existing drivers...");
 
@@ -166,27 +166,33 @@ namespace DriverUpdater
                 return false;
             }
 
-            Logging.Log("Uninstalling drivers...");
+            long Progress;
+            DateTime startTime;
 
-            long Progress = 0;
-            DateTime startTime = DateTime.Now;
-
-            foreach (string driver in existingDrivers)
+            if (IsUpgrade)
             {
-                Console.Title = $"Driver Updater - RemoveOfflineDriver - {driver}";
-                Logging.ShowProgress(Progress++, existingDrivers.Length, startTime, false);
+                Logging.Log("Uninstalling drivers...");
 
-                ntStatus = RemoveOfflineDriver(driver);
-                if ((ntStatus & 0x80000000) != 0)
+                Progress = 0;
+                startTime = DateTime.Now;
+
+                foreach (string driver in existingDrivers)
                 {
-                    Logging.Log("");
-                    Logging.Log($"RemoveOfflineDriver: ntStatus=0x{ntStatus:X8}, driver={driver}", Logging.LoggingLevel.Error);
+                    Console.Title = $"Driver Updater - RemoveOfflineDriver - {driver}";
+                    Logging.ShowProgress(Progress++, existingDrivers.Length, startTime, false);
 
-                    return false;
+                    ntStatus = RemoveOfflineDriver(driver);
+                    if ((ntStatus & 0x80000000) != 0)
+                    {
+                        Logging.Log("");
+                        Logging.Log($"RemoveOfflineDriver: ntStatus=0x{ntStatus:X8}, driver={driver}", Logging.LoggingLevel.Error);
+
+                        return false;
+                    }
                 }
+                Logging.ShowProgress(existingDrivers.Length, existingDrivers.Length, startTime, false);
+                Logging.Log("");
             }
-            Logging.ShowProgress(existingDrivers.Length, existingDrivers.Length, startTime, false);
-            Logging.Log("");
 
             Logging.Log("Installing new drivers...");
 

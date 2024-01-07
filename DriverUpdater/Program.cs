@@ -84,19 +84,31 @@ namespace DriverUpdater
 
                 try
                 {
-                    bool result = ResealForPnPFirstBootUx(DevicePart);
+                    bool upgrade = ResealForPnPFirstBootUx(DevicePart);
+                    // true = first boot completed
+                    // false = first boot not completed
+
+                    if (upgrade)
+                    {
+                        Logging.Log("The device has already been booted once. Reinstalling Board Support Package.");
+                    }
+                    else
+                    {
+                        Logging.Log("The device has not been booted yet. Installing Board Support Package for the first time prior to first boot.");
+                    }
+
+                    bool result = Install(Definition, DriverRepo, DevicePart, upgrade);
 
                     if (result)
                     {
-                        result = Install(Definition, DriverRepo, DevicePart);
-
-                        if (result)
+                        if (upgrade)
                         {
                             Logging.Log("Fixing potential registry left overs");
                             new RegistryFixer(DevicePart).FixRegistryPaths();
-                            Logging.Log("Enabling Cks");
-                            new CksLicensing(DevicePart).SetLicensedState();
                         }
+
+                        Logging.Log("Enabling Cks");
+                        new CksLicensing(DevicePart).SetLicensedState();
                     }
                 }
                 catch (Exception ex)
@@ -188,7 +200,7 @@ namespace DriverUpdater
             return result;
         }
 
-        private static bool Install(string Definition, string DriverRepo, string DrivePath)
+        private static bool Install(string Definition, string DriverRepo, string DrivePath, bool IsUpgrade)
         {
             Logging.Log("Reading definition file...");
             DefinitionParser definitionParser = new(Definition);
@@ -261,7 +273,7 @@ namespace DriverUpdater
 
             using DismProvider dismProvider = new(DrivePath);
 
-            return dismProvider.InstallDrivers(driverPathsToInstall) && dismProvider.InstallDepApps(appPaths) && dismProvider.InstallApps(appPaths);
+            return dismProvider.InstallDrivers(driverPathsToInstall, IsUpgrade) && dismProvider.InstallDepApps(appPaths) && dismProvider.InstallApps(appPaths);
         }
 
         private static bool OnlineInstall(string Definition, string DriverRepo)
