@@ -56,6 +56,11 @@ namespace DriverUpdater
 
         private static void DriverUpdaterAction(string Definition, string DriverRepo, string DevicePart)
         {
+            // Normalize Paths first
+            Definition = Path.GetFullPath(Definition);
+            DriverRepo = Path.GetFullPath(DriverRepo).TrimEnd(Path.PathSeparator);
+            DevicePart = Path.GetFullPath(DevicePart).TrimEnd(Path.PathSeparator);
+
             if (!File.Exists(Definition))
             {
                 Logging.Log($"The tool detected one of the provided paths does not exist ({Definition}). Recheck your parameters and try again.", Logging.LoggingLevel.Error);
@@ -75,7 +80,17 @@ namespace DriverUpdater
                 if (!Directory.Exists(DevicePart))
                 {
                     Logging.Log($"The tool detected one of the provided paths does not exist ({DevicePart}). Recheck your parameters and try again.", Logging.LoggingLevel.Error);
-                    Logging.Log("It's also possible the drive {DevicePart} is not the mounted phone but a left over ghosted partition. " +
+                    Logging.Log($"It's also possible the drive {DevicePart} is not the mounted phone but a left over ghosted partition. " +
+                        "Try assigning another letter if the drive is ghosted using diskpart. " +
+                        "A ghosted drive is a drive still mounted but not pointing to anything and showing errors when opening it.", Logging.LoggingLevel.Warning);
+                    Logging.Log("Usage: DriverUpdater <Path to definition> <Path to Driver repository> <Path to Device partition>");
+                    return;
+                }
+
+                if (!File.Exists(Path.Combine(DevicePart, "Windows", "System32", "Dism", "DismHost.exe")))
+                {
+                    Logging.Log($"The tool detected one of the provided paths does not point to a valid windows installation ({DevicePart}). Recheck your parameters and try again.", Logging.LoggingLevel.Error);
+                    Logging.Log($"It's also possible the drive {DevicePart} is not the mounted phone but a left over ghosted partition. " +
                         "Try assigning another letter if the drive is ghosted using diskpart. " +
                         "A ghosted drive is a drive still mounted but not pointing to anything and showing errors when opening it.", Logging.LoggingLevel.Warning);
                     Logging.Log("Usage: DriverUpdater <Path to definition> <Path to Driver repository> <Path to Device partition>");
@@ -229,12 +244,12 @@ namespace DriverUpdater
                 }
             }
 
-            IEnumerable<(string, string)> appPaths = [];
+            IEnumerable<(string, string)> applicationPaths = [];
 
             if (definitionParser.FeatureManifest.AppX != null)
             {
                 // This gets us the list of app packages to install on the device
-                appPaths = definitionParser
+                applicationPaths = definitionParser
                     .FeatureManifest
                     .AppX
                     .AppXPackages
@@ -250,17 +265,17 @@ namespace DriverUpdater
                     });
 
                 // Ensure everything exists
-                foreach ((string path, string license) in appPaths)
+                foreach ((string AppxFilePath, string LicenseFilePath) in applicationPaths)
                 {
-                    if (!File.Exists(path))
+                    if (!File.Exists(AppxFilePath))
                     {
-                        Logging.Log($"An app package was not found: {path}", Logging.LoggingLevel.Error);
+                        Logging.Log($"An app package was not found: {AppxFilePath}", Logging.LoggingLevel.Error);
                         everythingExists = false;
                     }
 
-                    if (!string.IsNullOrEmpty(license) && !File.Exists(license))
+                    if (!string.IsNullOrEmpty(LicenseFilePath) && !File.Exists(LicenseFilePath))
                     {
-                        Logging.Log($"An app package was not found: {license}", Logging.LoggingLevel.Error);
+                        Logging.Log($"An app package was not found: {LicenseFilePath}", Logging.LoggingLevel.Error);
                         everythingExists = false;
                     }
                 }
@@ -273,7 +288,15 @@ namespace DriverUpdater
 
             using DismProvider dismProvider = new(DrivePath);
 
-            return dismProvider.InstallDrivers(driverPathsToInstall, IsUpgrade) && dismProvider.InstallDepApps(appPaths) && dismProvider.InstallApps(appPaths);
+            if (IsUpgrade)
+            {
+                if (!dismProvider.UninstallExistingDrivers())
+                {
+                    return false;
+                }
+            }
+
+            return dismProvider.InstallDrivers(driverPathsToInstall) && dismProvider.InstallFrameworkDependencies(applicationPaths) && dismProvider.InstallApplications(applicationPaths);
         }
 
         private static bool OnlineInstall(string Definition, string DriverRepo)
@@ -305,12 +328,12 @@ namespace DriverUpdater
                 }
             }
 
-            IEnumerable<(string, string)> appPaths = [];
+            IEnumerable<(string, string)> applicationPaths = [];
 
             if (definitionParser.FeatureManifest.AppX != null)
             {
                 // This gets us the list of app packages to install on the device
-                appPaths = definitionParser
+                applicationPaths = definitionParser
                     .FeatureManifest
                     .AppX
                     .AppXPackages
@@ -326,23 +349,23 @@ namespace DriverUpdater
                     });
 
                 // Ensure everything exists
-                foreach ((string path, string license) in appPaths)
+                foreach ((string AppxFilePath, string LicenseFilePath) in applicationPaths)
                 {
-                    if (!File.Exists(path))
+                    if (!File.Exists(AppxFilePath))
                     {
-                        Logging.Log($"An app package was not found: {path}", Logging.LoggingLevel.Error);
+                        Logging.Log($"An app package was not found: {AppxFilePath}", Logging.LoggingLevel.Error);
                         everythingExists = false;
                     }
 
-                    if (!string.IsNullOrEmpty(license) && !File.Exists(license))
+                    if (!string.IsNullOrEmpty(LicenseFilePath) && !File.Exists(LicenseFilePath))
                     {
-                        Logging.Log($"An app package was not found: {license}", Logging.LoggingLevel.Error);
+                        Logging.Log($"An app package was not found: {LicenseFilePath}", Logging.LoggingLevel.Error);
                         everythingExists = false;
                     }
                 }
             }
 
-            return everythingExists && OnlineProvider.OnlineInstallDrivers(driverPathsToInstall) && OnlineProvider.OnlineInstallDepApps(appPaths) && OnlineProvider.OnlineInstallApps(appPaths);
+            return everythingExists && OnlineProvider.OnlineInstallDrivers(driverPathsToInstall) && OnlineProvider.OnlineInstallDepApps(applicationPaths) && OnlineProvider.OnlineInstallApps(applicationPaths);
         }
     }
 }
