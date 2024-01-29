@@ -28,12 +28,14 @@ namespace DefinitionMigrator
                     string path = Path.GetDirectoryName(inf);
                     string name = Path.GetFileName(inf);
 
-                    string xmlLine = "            <DriverPackageFile Path=\"$(mspackageroot)" + path.Replace(dir, "") + "\" Name=\"" + name + "\" ID=\"" + Path.GetFileNameWithoutExtension(inf) + "\"/>";
+                    string xmlLine = $@"            <DriverPackageFile Path=""$(mspackageroot){path.Replace(dir, "")}"" Name=""{name}"" ID=""{Path.GetFileNameWithoutExtension(inf)}""/>";
                     return xmlLine;
                 }).Order()];
 
                 string start = "<FeatureManifest xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns=\"http://schemas.microsoft.com/embedded/2004/10/ImageUpdate\" Revision=\"1\" SchemaVersion=\"1.3\">\r\n    <Drivers>\r\n        <BaseDriverPackages>";
-                string end = "        </BaseDriverPackages>\r\n    </Drivers>\r\n</FeatureManifest>";
+                string end = @"        </BaseDriverPackages>
+    </Drivers>
+</FeatureManifest>";
 
                 xmlLines.Insert(0, start);
                 xmlLines.Add(end);
@@ -63,7 +65,7 @@ namespace DefinitionMigrator
                     string path = Path.GetDirectoryName(inf);
                     string name = Path.GetFileName(inf);
 
-                    string xmlLine = "            <DriverPackageFile Path=\"$(mspackageroot)" + path.Replace(dir, "") + "\" Name=\"" + name + "\" ID=\"" + Path.GetFileNameWithoutExtension(inf) + "\"/>";
+                    string xmlLine = $@"            <DriverPackageFile Path=""$(mspackageroot){path.Replace(dir, "")}"" Name=""{name}"" ID=""{Path.GetFileNameWithoutExtension(inf)}""/>";
                     return xmlLine;
                 }).Order()];
 
@@ -73,21 +75,28 @@ namespace DefinitionMigrator
                     string path = Path.GetDirectoryName(inf);
                     string name = Path.GetFileName(inf);
 
-                    string xmlLine = "            <PackageFile Path=\"$(mspackageroot)" + path.Replace(dir, "") + "\" Name=\"" + name + "\" ID=\"" + Path.GetFileNameWithoutExtension(inf) + "\"/>";
+                    string xmlLine = $@"            <PackageFile Path=""$(mspackageroot){path.Replace(dir, "")}"" Name=""{name}"" ID=""{Path.GetFileNameWithoutExtension(inf)}""/>";
 
                     string licenseFile = Path.GetFileNameWithoutExtension(inf) + ".xml";
 
                     if (File.Exists(path + "\\" + licenseFile))
                     {
-                        xmlLine = "            <PackageFile Path=\"$(mspackageroot)" + path.Replace(dir, "") + "\" Name=\"" + name + "\" ID=\"" + Path.GetFileNameWithoutExtension(inf) + "\" LicenseFile=\"" + licenseFile + "\"/>";
+                        xmlLine = $@"            <PackageFile Path=""$(mspackageroot){path.Replace(dir, "")}"" Name=""{name}"" ID=""{Path.GetFileNameWithoutExtension(inf)}"" LicenseFile=""{licenseFile}""/>";
                     }
 
                     return xmlLine;
                 }).Order()];
 
-                string start = "<FeatureManifest xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns=\"http://schemas.microsoft.com/embedded/2004/10/ImageUpdate\" Revision=\"1\" SchemaVersion=\"1.3\">\r\n    <Drivers>\r\n        <BaseDriverPackages>";
-                string mid = "        </BaseDriverPackages>\r\n    </Drivers>\r\n    <AppX>\r\n        <AppXPackages>";
-                string end = "        </AppXPackages>\r\n    </AppX>\r\n</FeatureManifest>";
+                string start = @"<FeatureManifest xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"" xmlns:xsd=""http://www.w3.org/2001/XMLSchema"" xmlns=""http://schemas.microsoft.com/embedded/2004/10/ImageUpdate"" Revision=""1"" SchemaVersion=""1.3"">
+    <Drivers>
+        <BaseDriverPackages>";
+                string mid = @"        </BaseDriverPackages>
+    </Drivers>
+    <AppX>
+        <AppXPackages>";
+                string end = @"        </AppXPackages>
+    </AppX>
+</FeatureManifest>";
 
                 xmlLines.Insert(0, start);
                 xmlLines.Add(mid);
