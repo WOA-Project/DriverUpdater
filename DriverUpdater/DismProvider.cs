@@ -173,9 +173,16 @@ namespace DriverUpdater
                 if ((ntStatus & 0x80000000) != 0)
                 {
                     Logging.Log("");
-                    Logging.Log($"RemoveOfflineDriver: ntStatus=0x{ntStatus:X8}, driver={driver}", Logging.LoggingLevel.Error);
-
-                    return false;
+                    
+                    if (ntStatus == 0x80070490)
+                    {
+                        Logging.Log($"RemoveOfflineDriver: ntStatus=0x{ntStatus:X8}, driver={driver}", Logging.LoggingLevel.Warning);
+                    }
+                    else
+                    {
+                        Logging.Log($"RemoveOfflineDriver: ntStatus=0x{ntStatus:X8}, driver={driver}", Logging.LoggingLevel.Error);
+                        return false;
+                    }
                 }
             }
             Logging.ShowProgress(existingOEMDrivers.Length, existingOEMDrivers.Length, startTime, false);
