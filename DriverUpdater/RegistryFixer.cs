@@ -17,7 +17,9 @@ namespace DriverUpdater
         private static void FixDriverStorePathsInRegistryValueForLeftOvers(RegistryKey registryKey, string registryValue)
         {
             Regex regex = new("(.*oem[0-9]+\\.inf.*)|(.*(QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_)[0-9A-F]{4}.*)|(.*surface.*duo.*inf)|(.*\\\\qc.*)|(.*\\\\surface.*)");
-            Regex antiRegex = new("(.*QCOM((2465)|(2466)|(2484)|(2488)|(24A5)|(24B6)|(24B7)|(24BF)|(7002)|(FFE1)|(FFE2)|(FFE3)|(FFE4)|(FFE5)).*)|(.*qcap.*)");
+            Regex antiRegex = new("(.*QCOM((2465)|(2466)|(2484)|(2488)|(24A5)|(24B6)|(24B7)|(24BF)|(7002)|(FFE1)|(FFE2)|(FFE3)|(FFE4)|(FFE5)).*)|(.*qcap.*)|(.*qcursext.*)");
+
+            // TODO:
             // Key: Microsoft\Windows\CurrentVersion\Setup\PnpResources\Registry\HKLM\ ... \
             // Val: Owners
 
@@ -115,7 +117,7 @@ namespace DriverUpdater
             if (registryKey != null)
             {
                 Regex regex = new("(.*oem[0-9]+\\.inf.*)|(.*(QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_)[0-9A-F]{4}.*)|(.*surface.*duo.*inf)|(.*\\\\qc.*)|(.*\\\\surface.*)");
-                Regex antiRegex = new("(.*QCOM((2465)|(2466)|(2484)|(2488)|(24A5)|(24B6)|(24B7)|(24BF)|(7002)|(FFE1)|(FFE2)|(FFE3)|(FFE4)|(FFE5)).*)|(.*qcap.*)");
+                Regex antiRegex = new("(.*QCOM((2465)|(2466)|(2484)|(2488)|(24A5)|(24B6)|(24B7)|(24BF)|(7002)|(FFE1)|(FFE2)|(FFE3)|(FFE4)|(FFE5)).*)|(.*qcap.*)|(.*qcursext.*)");
 
                 foreach (string subRegistryValue in registryKey.GetValueNames())
                 {
