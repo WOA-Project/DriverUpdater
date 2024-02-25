@@ -1,5 +1,6 @@
 ﻿using DiscUtils.Registry;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -8,14 +9,176 @@ namespace DriverUpdater
 {
     public class RegistryFixer
     {
-        private readonly string DrivePath = "";
-
-        public RegistryFixer(string DrivePath)
+        public static void FixLeftOvers(string DrivePath)
         {
-            this.DrivePath = DrivePath;
+            _ = ModifyRegistryForLeftOvers(Path.Combine(DrivePath, "Windows\\System32\\config\\SYSTEM"), Path.Combine(DrivePath, "Windows\\System32\\config\\SOFTWARE"));
         }
 
-        public void FixRegistryPaths()
+        private static void FixDriverStorePathsInRegistryValueForLeftOvers(RegistryKey registryKey, string registryValue)
+        {
+            Regex regex = new("(.*oem[0-9]+\\.inf.*)|(.*(QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_)[0-9A-F]{4}.*)|(.*surface.*duo.*inf)|(.*\\\\qc.*)|(.*\\\\surface.*)");
+            Regex antiRegex = new("(.*QCOM((2465)|(2466)|(2484)|(2488)|(24A5)|(24B6)|(24B7)|(24BF)|(7002)|(FFE1)|(FFE2)|(FFE3)|(FFE4)|(FFE5)).*)|(.*qcap.*)");
+            // Key: Microsoft\Windows\CurrentVersion\Setup\PnpResources\Registry\HKLM\ ... \
+            // Val: Owners
+
+            if (registryKey?.GetValueNames().Any(x => x.Equals(registryValue, StringComparison.InvariantCultureIgnoreCase)) == true)
+            {
+                switch (registryKey.GetValueType(registryValue))
+                {
+                    case RegistryValueType.String:
+                        {
+                            string og = (string)registryKey.GetValue(registryValue);
+
+                            if (regex.IsMatch(og) && !antiRegex.IsMatch(og))
+                            {
+                                string currentValue = regex.Match(og).Value;
+
+                                Logging.Log($"Deleting {currentValue} in {registryKey.Name}\\{registryValue}");
+
+                                if (registryValue == "")
+                                {
+                                    registryValue = null;
+                                }
+
+                                registryKey.DeleteValue(registryValue);
+                            }
+
+                            break;
+                        }
+                    case RegistryValueType.ExpandString:
+                        {
+                            string og = (string)registryKey.GetValue(registryValue);
+
+                            if (regex.IsMatch(og) && !antiRegex.IsMatch(og))
+                            {
+                                string currentValue = regex.Match(og).Value;
+
+                                Logging.Log($"Deleting {currentValue} in {registryKey.Name}\\{registryValue}");
+
+                                if (registryValue == "")
+                                {
+                                    registryValue = null;
+                                }
+
+                                registryKey.DeleteValue(registryValue);
+                            }
+
+                            break;
+                        }
+                    case RegistryValueType.MultiString:
+                        {
+                            string[] ogvals = (string[])registryKey.GetValue(registryValue);
+                            List<string> newVals = [];
+
+                            bool updated = false;
+
+                            foreach (string og in ogvals)
+                            {
+                                if (regex.IsMatch(og) && !antiRegex.IsMatch(og))
+                                {
+                                    string currentValue = regex.Match(og).Value;
+
+                                    Logging.Log($"Deleting {currentValue} in {registryKey.Name}\\{registryValue}");
+                                    updated = true;
+                                }
+                                else
+                                {
+                                    newVals.Add(og);
+                                }
+                            }
+
+                            if (updated)
+                            {
+                                if (newVals.Any())
+                                {
+                                    registryKey.SetValue(registryValue, newVals.ToArray(), RegistryValueType.MultiString);
+                                }
+                                else
+                                {
+                                    if (registryValue == "")
+                                    {
+                                        registryValue = null;
+                                    }
+
+                                    registryKey.DeleteValue(registryValue);
+                                }
+                            }
+
+                            break;
+                        }
+                }
+            }
+        }
+
+        private static void CrawlInRegistryKeyForLeftOvers(RegistryKey registryKey)
+        {
+            if (registryKey != null)
+            {
+                Regex regex = new("(.*oem[0-9]+\\.inf.*)|(.*(QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_)[0-9A-F]{4}.*)|(.*surface.*duo.*inf)|(.*\\\\qc.*)|(.*\\\\surface.*)");
+                Regex antiRegex = new("(.*QCOM((2465)|(2466)|(2484)|(2488)|(24A5)|(24B6)|(24B7)|(24BF)|(7002)|(FFE1)|(FFE2)|(FFE3)|(FFE4)|(FFE5)).*)|(.*qcap.*)");
+
+                foreach (string subRegistryValue in registryKey.GetValueNames())
+                {
+                    if (regex.IsMatch(subRegistryValue) && !antiRegex.IsMatch(subRegistryValue))
+                    {
+                        Logging.Log($"Deleting {registryKey.Name}\\{subRegistryValue}");
+                        registryKey.DeleteValue(subRegistryValue);
+
+                        continue;
+                    }
+
+                    FixDriverStorePathsInRegistryValueForLeftOvers(registryKey, subRegistryValue);
+                }
+
+                foreach (string subRegistryKey in registryKey.GetSubKeyNames())
+                {
+                    if (regex.IsMatch(subRegistryKey) && !antiRegex.IsMatch(subRegistryKey))
+                    {
+                        Logging.Log($"Deleting {registryKey.Name}\\{subRegistryKey}");
+                        registryKey.DeleteSubKeyTree(subRegistryKey);
+
+                        continue;
+                    }
+
+                    CrawlInRegistryKeyForLeftOvers(registryKey.OpenSubKey(subRegistryKey));
+                }
+            }
+        }
+
+        internal static bool ModifyRegistryForLeftOvers(string systemHivePath, string softwareHivePath)
+        {
+            try
+            {
+                using (RegistryHive hive = new(
+                    File.Open(
+                        systemHivePath,
+                        FileMode.Open,
+                        FileAccess.ReadWrite
+                    ), DiscUtils.Streams.Ownership.Dispose))
+                {
+                    Logging.Log("Processing SYSTEM hive");
+                    CrawlInRegistryKeyForLeftOvers(hive.Root);
+                }
+
+                using (RegistryHive hive = new(
+                    File.Open(
+                        softwareHivePath,
+                        FileMode.Open,
+                        FileAccess.ReadWrite
+                    ), DiscUtils.Streams.Ownership.Dispose))
+                {
+                    Logging.Log("Processing SOFTWARE hive");
+                    CrawlInRegistryKeyForLeftOvers(hive.Root);
+                }
+            }
+            catch
+            {
+                return false;
+            }
+            return true;
+        }
+
+        public static void FixRegistryPaths(string DrivePath)
         {
             // Windows DriverStore directory is located at \Windows\System32\DriverStore\FileRepository
             // Drivers are named using the following way acpi.inf_amd64_f8b60f94eae135e9

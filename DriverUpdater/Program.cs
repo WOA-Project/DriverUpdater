@@ -112,19 +112,26 @@ namespace DriverUpdater
                         Logging.Log("The device has not been booted yet. Installing Board Support Package for the first time prior to first boot.");
                     }
 
-                    bool result = Install(Definition, DriverRepo, DevicePart, upgrade);
-
-                    if (result)
+                    if (upgrade)
                     {
-                        if (upgrade)
-                        {
-                            Logging.Log("Fixing potential registry left overs");
-                            new RegistryFixer(DevicePart).FixRegistryPaths();
-                        }
+                        UninstallDrivers(DevicePart, upgrade);
 
-                        Logging.Log("Enabling Cks");
-                        new CksLicensing(DevicePart).SetLicensedState();
+                        Logging.Log("Fixing potential registry left overs");
+                        RegistryFixer.FixLeftOvers(DevicePart);
                     }
+
+                    InstallDrivers(Definition, DriverRepo, DevicePart);
+
+                    if (upgrade)
+                    {
+                        Logging.Log("Fixing potential registry left overs");
+                        RegistryFixer.FixRegistryPaths(DevicePart);
+                    }
+
+                    Logging.Log("Enabling Cks");
+                    new CksLicensing(DevicePart).SetLicensedState();
+
+                    InstallApps(Definition, DriverRepo, DevicePart, upgrade);
                 }
                 catch (Exception ex)
                 {
@@ -215,7 +222,7 @@ namespace DriverUpdater
             return result;
         }
 
-        private static bool Install(string Definition, string DriverRepo, string DrivePath, bool IsUpgrade)
+        private static bool InstallDrivers(string Definition, string DriverRepo, string DrivePath)
         {
             Logging.Log("Reading definition file...");
             DefinitionParser definitionParser = new(Definition);
@@ -243,6 +250,37 @@ namespace DriverUpdater
                     everythingExists = false;
                 }
             }
+
+            if (!everythingExists)
+            {
+                return false;
+            }
+
+            using DismProvider dismProvider = new(DrivePath);
+            return dismProvider.InstallDrivers(driverPathsToInstall);
+        }
+
+        private static bool UninstallDrivers(string DrivePath, bool IsUpgrade)
+        {
+            using DismProvider dismProvider = new(DrivePath);
+
+            if (IsUpgrade)
+            {
+                if (!dismProvider.UninstallExistingDrivers())
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool InstallApps(string Definition, string DriverRepo, string DrivePath, bool IsUpgrade)
+        {
+            Logging.Log("Reading definition file...");
+            DefinitionParser definitionParser = new(Definition);
+
+            bool everythingExists = true;
 
             IEnumerable<(string, string)> applicationPaths = [];
 
@@ -288,15 +326,7 @@ namespace DriverUpdater
 
             using DismProvider dismProvider = new(DrivePath);
 
-            if (IsUpgrade)
-            {
-                if (!dismProvider.UninstallExistingDrivers())
-                {
-                    return false;
-                }
-            }
-
-            return dismProvider.InstallDrivers(driverPathsToInstall) && dismProvider.InstallFrameworkDependencies(applicationPaths) && dismProvider.InstallApplications(applicationPaths);
+            return dismProvider.InstallFrameworkDependencies(applicationPaths) && dismProvider.InstallApplications(applicationPaths);
         }
 
         private static bool OnlineInstall(string Definition, string DriverRepo)

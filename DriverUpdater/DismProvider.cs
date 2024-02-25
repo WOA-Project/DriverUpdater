@@ -35,7 +35,7 @@ namespace DriverUpdater
         public DismProvider(string DrivePath)
         {
             // Workaround for issue in DISM api
-            if (!DrivePath.EndsWith("\\"))
+            if (!DrivePath.EndsWith('\\'))
             {
                 DrivePath += "\\";
             }
@@ -144,7 +144,7 @@ namespace DriverUpdater
                     Logging.Log("");
                     Logging.Log($"DismApi->AddProvisionedAppxPackage: ntStatus=0x{ntStatus:X8}, app={app.AppXFilePath}", Logging.LoggingLevel.Error);
 
-                    return false;
+                    //return false;
                 }
             }
 
@@ -175,7 +175,7 @@ namespace DriverUpdater
                     Logging.Log("");
                     Logging.Log($"RemoveOfflineDriver: ntStatus=0x{ntStatus:X8}, driver={driver}", Logging.LoggingLevel.Error);
 
-                    return false;
+                    //return false;
                 }
             }
             Logging.ShowProgress(existingOEMDrivers.Length, existingOEMDrivers.Length, startTime, false);
@@ -193,7 +193,7 @@ namespace DriverUpdater
             if ((ntStatus & 0x80000000) != 0)
             {
                 Logging.Log($"DriverStoreOfflineEnumDriverPackage: ntStatus=0x{ntStatus:X8}", Logging.LoggingLevel.Error);
-                return false;
+                //return false;
             }
 
             if (!UninstallDrivers(existingOEMDrivers))
@@ -243,7 +243,7 @@ namespace DriverUpdater
                     Logging.Log("");
                     Logging.Log($"DismApi->AddDriver: ntStatus=0x{ntStatus:X8}, driverInf={inf}", Logging.LoggingLevel.Error);
 
-                    return false;
+                    //return false;
                 }
             }
             Logging.ShowProgress(infFiles.Count(), infFiles.Count(), startTime, false);
@@ -298,7 +298,7 @@ namespace DriverUpdater
                     Logging.Log("");
                     Logging.Log($"DismApi->AddProvisionedAppxPackage: ntStatus=0x{ntStatus:X8}, app={app.AppXFilePath}", Logging.LoggingLevel.Error);
 
-                    return false;
+                    //return false;
                 }
             }
 
