@@ -9,6 +9,9 @@ namespace DriverUpdater
 {
     public class RegistryFixer
     {
+        private static Regex regex = new("""(.*oem[0-9]+\.inf.*)|(.*(QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_)[0-9A-F]{4}.*)|(.*surface.*duo.*inf)|(.*\\qc.*)|(.*\\surface.*)""");
+        private static Regex antiRegex = new("""(.*QCOM((24[0-9A-F][0-9A-F])|(7002)|(FFE[0-9A-F])).*)|(.*qcap.*)|(.*qcursext.*)|(.*hidspi.*)|(.*ufsstor.*)|(.*sdstor.*)|(.*sdbus.*)|(.*storufs.*)|(.*u..chipidea.*)|(.*u..synopsys.*)|(.*qc.*_i\.inf.*)""");
+
         public static void FixLeftOvers(string DrivePath)
         {
             _ = ModifyRegistryForLeftOvers(Path.Combine(DrivePath, "Windows\\System32\\config\\SYSTEM"), Path.Combine(DrivePath, "Windows\\System32\\config\\SOFTWARE"));
@@ -16,9 +19,6 @@ namespace DriverUpdater
 
         private static void FixDriverStorePathsInRegistryValueForLeftOvers(RegistryKey registryKey, string registryValue)
         {
-            Regex regex = new("(.*oem[0-9]+\\.inf.*)|(.*(QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_)[0-9A-F]{4}.*)|(.*surface.*duo.*inf)|(.*\\\\qc.*)|(.*\\\\surface.*)");
-            Regex antiRegex = new("(.*QCOM((24[0-9][0-9])|(7002)|(FFE[0-9])).*)|(.*qcap.*)|(.*qcursext.*)|(.*hidspi.*)|(.*ufsstor.*)|(.*sdstor.*)|(.*qc.*_i\\.inf.*)");
-
             // TODO:
             // Key: Microsoft\Windows\CurrentVersion\Setup\PnpResources\Registry\HKLM\ ... \
             // Val: Owners
@@ -35,7 +35,7 @@ namespace DriverUpdater
                             {
                                 string currentValue = regex.Match(og).Value;
 
-                                Logging.Log($"Deleting {currentValue} in {registryKey.Name}\\{registryValue}");
+                                Logging.Log($"Deleting Value (String) {currentValue} in {registryKey.Name}\\{registryValue}");
 
                                 if (registryValue == "")
                                 {
@@ -55,7 +55,7 @@ namespace DriverUpdater
                             {
                                 string currentValue = regex.Match(og).Value;
 
-                                Logging.Log($"Deleting {currentValue} in {registryKey.Name}\\{registryValue}");
+                                Logging.Log($"Deleting Value (Expand String) {currentValue} in {registryKey.Name}\\{registryValue}");
 
                                 if (registryValue == "")
                                 {
@@ -80,7 +80,7 @@ namespace DriverUpdater
                                 {
                                     string currentValue = regex.Match(og).Value;
 
-                                    Logging.Log($"Deleting {currentValue} in {registryKey.Name}\\{registryValue}");
+                                    Logging.Log($"Deleting Value (Multi String) {currentValue} in {registryKey.Name}\\{registryValue}");
                                     updated = true;
                                 }
                                 else
@@ -116,14 +116,12 @@ namespace DriverUpdater
         {
             if (registryKey != null)
             {
-                Regex regex = new("(.*oem[0-9]+\\.inf.*)|(.*(QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_)[0-9A-F]{4}.*)|(.*surface.*duo.*inf)|(.*\\\\qc.*)|(.*\\\\surface.*)");
-                Regex antiRegex = new("(.*QCOM((24[0-9][0-9])|(7002)|(FFE[0-9])).*)|(.*qcap.*)|(.*qcursext.*)|(.*hidspi.*)|(.*ufsstor.*)|(.*sdstor.*)|(.*qc.*_i\\.inf.*)");
 
                 foreach (string subRegistryValue in registryKey.GetValueNames())
                 {
                     if (regex.IsMatch(subRegistryValue) && !antiRegex.IsMatch(subRegistryValue))
                     {
-                        Logging.Log($"Deleting {registryKey.Name}\\{subRegistryValue}");
+                        Logging.Log($"Deleting Value {registryKey.Name}\\{subRegistryValue}");
                         registryKey.DeleteValue(subRegistryValue);
 
                         continue;
@@ -136,7 +134,7 @@ namespace DriverUpdater
                 {
                     if (regex.IsMatch(subRegistryKey) && !antiRegex.IsMatch(subRegistryKey))
                     {
-                        Logging.Log($"Deleting {registryKey.Name}\\{subRegistryKey}");
+                        Logging.Log($"Deleting Sub Key Tree {registryKey.Name}\\{subRegistryKey}");
                         registryKey.DeleteSubKeyTree(subRegistryKey);
 
                         continue;
