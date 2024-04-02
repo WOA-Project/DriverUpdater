@@ -7,10 +7,10 @@ using System.Text.RegularExpressions;
 
 namespace DriverUpdater
 {
-    public class RegistryFixer
+    public partial class RegistryFixer
     {
-        private static Regex regex = new("""(.*oem[0-9]+\.inf.*)|(.*(QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_)[0-9A-F]{4}.*)|(.*surface.*duo.*inf)|(.*\\qc.*)|(.*\\surface.*)""");
-        private static Regex antiRegex = new("""(.*QCOM((24[0-9A-F][0-9A-F])|(7002)|(FFE[0-9A-F])).*)|(.*qcap.*)|(.*qcursext.*)|(.*hidspi.*)|(.*ufsstor.*)|(.*sdstor.*)|(.*sdbus.*)|(.*storufs.*)|(.*u..chipidea.*)|(.*u..synopsys.*)|(.*qc.*_i\.inf.*)""");
+        private static readonly Regex regex = DeviceRegex();
+        private static readonly Regex antiRegex = AntiDeviceRegex();
 
         public static void FixLeftOvers(string DrivePath)
         {
@@ -354,5 +354,10 @@ namespace DriverUpdater
             }
             return true;
         }
+
+        [GeneratedRegex("""(.*oem[0-9]+\.inf.*)|(.*(QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_|qcom|mshw|ven_qcom&dev_|ven_mshw&dev_)[0-9A-Fa-f]{4}.*)|(.*surface.*duo.*inf)|(.*\\qc.*)|(.*\\surface.*)""")]
+        private static partial Regex DeviceRegex();
+        [GeneratedRegex("""(.*(QCOM|qcom)((24[0-9A-Fa-f][0-9A-Fa-f])|(7002)|((FFE|ffe)[0-9A-Fa-f])).*)|(.*qcap.*)|(.*qcursext.*)|(.*hidspi.*)|(.*ufsstor.*)|(.*sdstor.*)|(.*sdbus.*)|(.*storufs.*)|(.*u..chipidea.*)|(.*u..synopsys.*)|(.*qc.*_i\.inf.*)""")]
+        private static partial Regex AntiDeviceRegex();
     }
 }
