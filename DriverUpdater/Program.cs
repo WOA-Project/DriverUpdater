@@ -125,7 +125,7 @@ namespace DriverUpdater
                     if (upgrade)
                     {
                         Logging.Log("Fixing potential registry left overs");
-                        RegistryFixer.FixRegistryPaths(DevicePart);
+                        RegistryLeftoverFixer.FixRegistryPaths(DevicePart);
                     }
 
                     Logging.Log("Enabling Cks");
