@@ -11,7 +11,7 @@ namespace DriverUpdater
         public DefinitionParser(string DefinitionFile)
         {
             using Stream content = File.OpenRead(DefinitionFile);
-            FeatureManifest = new XmlSerializer(typeof(FeatureManifest)).Deserialize(content) as FeatureManifest;
+            FeatureManifest = Program.serializer.Deserialize(content) as FeatureManifest;
         }
     }
 }

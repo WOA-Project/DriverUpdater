@@ -10,7 +10,21 @@ namespace DriverUpdater
     {
         public static bool OnlineInstallDrivers(IEnumerable<string> infFiles)
         {
-            Logging.Log("Installing new drivers...");
+            Logging.LogMilestone("Installing new drivers...");
+
+            Microsoft.Win32.RegistryKey registryKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey("""Software\Microsoft\Windows\CurrentVersion\Setup""", true);
+            bool MinimizeFootprintExists = false;
+            if (registryKey != null)
+            {
+                if (registryKey.GetValue("MinimizeFootprint") != null)
+                {
+                    MinimizeFootprintExists = true;
+                }
+                else
+                {
+                    registryKey.SetValue("MinimizeFootprint", 1, Microsoft.Win32.RegistryValueKind.DWord);
+                }
+            }
 
             long Progress = 0;
             DateTime startTime = DateTime.Now;
@@ -20,7 +34,7 @@ namespace DriverUpdater
             {
                 // First add the driver package to the image
                 Console.Title = $"Driver Updater - DismApi->AddDriver - {inf}";
-                Logging.ShowProgress(Progress++, infFiles.Count(), startTime, false);
+                Logging.ShowProgress(Progress++, infFiles.Count(), startTime, false, "Installing new drivers...", Path.GetFileName(inf));
 
                 string Command = $"pnputil /add-driver \"{inf}\" /install";
 
@@ -34,15 +48,25 @@ namespace DriverUpdater
                     RedirectStandardError = true
                 }).WaitForExit();
             }
-            Logging.ShowProgress(infFiles.Count(), infFiles.Count(), startTime, false);
+            Logging.ShowProgress(infFiles.Count(), infFiles.Count(), startTime, false, "Installing new drivers...", "");
             Logging.Log("");
+
+            if (registryKey != null)
+            {
+                if (!MinimizeFootprintExists)
+                {
+                    registryKey.DeleteValue("MinimizeFootprint");
+                }
+
+                registryKey.Dispose();
+            }
 
             return true;
         }
 
         public static bool OnlineInstallApps(IEnumerable<(string, string)> appxs)
         {
-            Logging.Log("Installing App Packages...");
+            Logging.LogMilestone("Installing App Packages...");
 
             IEnumerable<(string, string)> appPackages = appxs.Where(x => !Path.GetDirectoryName(x.Item1).EndsWith(Path.DirectorySeparatorChar + "Frameworks"));
 
@@ -52,7 +76,7 @@ namespace DriverUpdater
             foreach ((string, string) app in appPackages)
             {
                 Console.Title = $"Driver Updater - Installing App Package - {app.Item1}";
-                Logging.ShowProgress(Progress++, appPackages.Count(), startTime, false);
+                Logging.ShowProgress(Progress++, appPackages.Count(), startTime, false, "Installing App Packages...", Path.GetFileName(app.Item1));
 
                 string Command = $"powershell.exe Add-AppxProvisionedPackage -Online -Path \"{app.Item1}\"";
 
@@ -72,7 +96,7 @@ namespace DriverUpdater
                 }).WaitForExit();
             }
 
-            Logging.ShowProgress(appPackages.Count(), appPackages.Count(), startTime, false);
+            Logging.ShowProgress(appPackages.Count(), appPackages.Count(), startTime, false, "Installing App Packages...", "");
             Logging.Log("");
 
             return true;
@@ -82,7 +106,7 @@ namespace DriverUpdater
         {
             IEnumerable<(string, string)> appDependencyPackages = appxs.Where(x => x.Item1.Replace(Path.DirectorySeparatorChar + Path.GetFileName(x.Item1), "").EndsWith(Path.DirectorySeparatorChar + "Frameworks"));
 
-            Logging.Log("Installing App Framework Packages...");
+            Logging.LogMilestone("Installing App Framework Packages...");
 
             long Progress = 0;
             DateTime startTime = DateTime.Now;
@@ -90,7 +114,7 @@ namespace DriverUpdater
             foreach ((string, string) app in appDependencyPackages)
             {
                 Console.Title = $"Driver Updater - Installing App Framework Package - {app.Item1}";
-                Logging.ShowProgress(Progress++, appDependencyPackages.Count(), startTime, false);
+                Logging.ShowProgress(Progress++, appDependencyPackages.Count(), startTime, false, "Installing App Framework Packages...", Path.GetFileName(app.Item1));
 
                 string Command = $"powershell.exe Add-AppxProvisionedPackage -Online -Path \"{app.Item1}\"";
 
@@ -110,11 +134,10 @@ namespace DriverUpdater
                 }).WaitForExit();
             }
 
-            Logging.ShowProgress(appDependencyPackages.Count(), appDependencyPackages.Count(), startTime, false);
+            Logging.ShowProgress(appDependencyPackages.Count(), appDependencyPackages.Count(), startTime, false, "Installing App Framework Packages...", "");
             Logging.Log("");
 
             return true;
         }
-
     }
 }

@@ -40,11 +40,6 @@ namespace DriverUpdater.ImageUpdate
         {
             get; set;
         }
-        [XmlElement(ElementName = "FeatureIDs", Namespace = "http://schemas.microsoft.com/embedded/2004/10/ImageUpdate")]
-        public FeatureIDs FeatureIDs
-        {
-            get; set;
-        }
         [XmlAttribute(AttributeName = "LicenseFile")]
         public string LicenseFile
         {

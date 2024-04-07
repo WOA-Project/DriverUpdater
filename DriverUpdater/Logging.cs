@@ -25,6 +25,8 @@ namespace DriverUpdater
 {
     internal static class Logging
     {
+        internal static ProgressInterface progress = null;
+
         public enum LoggingLevel
         {
             Information,
@@ -34,8 +36,10 @@ namespace DriverUpdater
 
         private static readonly object lockObj = new();
 
-        public static void ShowProgress(long CurrentProgress, long TotalProgress, DateTime startTime, bool DisplayRed)
+        public static void ShowProgress(long CurrentProgress, long TotalProgress, DateTime startTime, bool DisplayRed, string StatusTitle, string StatusMessage)
         {
+            progress?.ReportProgress((int)(CurrentProgress * 100 / TotalProgress), StatusTitle, StatusMessage);
+
             DateTime now = DateTime.Now;
             TimeSpan timeSoFar = now - startTime;
 
@@ -53,7 +57,7 @@ namespace DriverUpdater
                 CurrentProgress = 1;
             }
 
-            Log(string.Format("{0} {1:hh\\:mm\\:ss\\.f}", GetDismLikeProgBar((int)(CurrentProgress * 100 / TotalProgress)), remaining, remaining.TotalHours, remaining.Minutes, remaining.Seconds, remaining.Milliseconds), severity: DisplayRed ? LoggingLevel.Warning : LoggingLevel.Information, returnline: false);
+            Log(string.Format("{0} {1:hh\\:mm\\:ss\\.f}", GetDismLikeProgBar((int)(CurrentProgress * 100 / TotalProgress)), remaining, remaining.TotalHours, remaining.Minutes, remaining.Seconds, remaining.Milliseconds), severity: DisplayRed ? LoggingLevel.Warning : LoggingLevel.Information, returnline: false, doNotUseGui: true);
         }
 
         private static string GetDismLikeProgBar(int perc)
@@ -73,10 +77,63 @@ namespace DriverUpdater
             return "[" + bases + "]";
         }
 
-        public static void Log(string message, LoggingLevel severity = LoggingLevel.Information, bool returnline = true)
+        public static void LogMilestone(string message, LoggingLevel severity = LoggingLevel.Information, bool returnline = true, bool doNotUseGui = false)
         {
             lock (lockObj)
             {
+                if (progress != null && !doNotUseGui)
+                {
+                    progress.ReportProgress(null, message, "Pending");
+                }
+
+                if (message?.Length == 0)
+                {
+                    Console.WriteLine();
+                    return;
+                }
+
+                ConsoleColor originalConsoleColor = Console.ForegroundColor;
+
+                string msg = "";
+
+                switch (severity)
+                {
+                    case LoggingLevel.Warning:
+                        msg = "  Warning  ";
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        break;
+                    case LoggingLevel.Error:
+                        msg = "   Error   ";
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        break;
+                    case LoggingLevel.Information:
+                        msg = "Information";
+                        Console.ForegroundColor = originalConsoleColor;
+                        break;
+                }
+
+                if (returnline)
+                {
+                    Console.WriteLine(DateTime.Now.ToString("'['HH':'mm':'ss']'") + "[" + msg + "] " + message);
+                }
+                else
+                {
+                    Console.Write("\r" + DateTime.Now.ToString("'['HH':'mm':'ss']'") + "[" + msg + "] " + message);
+                }
+
+                Console.ForegroundColor = originalConsoleColor;
+            }
+        }
+
+        public static void Log(string message, LoggingLevel severity = LoggingLevel.Information, bool returnline = true, bool doNotUseGui = false)
+        {
+            lock (lockObj)
+            {
+                if (progress != null && !doNotUseGui)
+                {
+                    progress.ReportProgress(null, "", message);
+                }
+
                 if (message?.Length == 0)
                 {
                     Console.WriteLine();

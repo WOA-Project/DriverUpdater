@@ -10,7 +10,9 @@ namespace DriverUpdater
     {
         public static void FixRegistryPaths(string DrivePath)
         {
-            Regex inboxRegex = new(string.Join("|", Directory.EnumerateFiles(Path.Combine(DrivePath, "Windows", "INF"), "*.inf").Select(x => Path.GetFileName(x)).Where(x => !(OEMInfRegex().IsMatch(x))).Select(x => ".*" + x + ".*")));
+            // TODO: Fix perf
+            //string[] inboxINFElements = Directory.EnumerateFiles(Path.Combine(DrivePath, "Windows", "INF"), "*.inf").Select(Path.GetFileName).Where(x => !OEMInfRegex().IsMatch(x)).ToArray();
+            string[] inboxINFElements = ["qcursext.inf", "storufs.inf", "sdstor.inf", "hidspi_km.inf", "sdbus.inf", ""];
 
             // Windows DriverStore directory is located at \Windows\System32\DriverStore\FileRepository
             // Drivers are named using the following way acpi.inf_amd64_f8b60f94eae135e9
@@ -24,21 +26,36 @@ namespace DriverUpdater
             string[] Folders = Directory.EnumerateDirectories(DriverStorePath).Where(x => Directory.EnumerateFiles(x, "*.cat").Any()).Select(x => x.Split('\\').Last()).ToArray();
 
             // Now, create a new array of all folder names, but without the hash dependent part.
-            Regex[] folderRegexes = Folders.Select(BuildRegexForDriverStoreFolderName).ToArray();
+            string[] folderRegexes = Folders.Select(driverStoreFolderName => $"{string.Join('_', driverStoreFolderName.Split('_')[..driverStoreFolderName.Count(y => y == '_')])}_").ToArray();
 
             // Now that this is done, process the hives.
-            _ = ModifyRegistry(inboxRegex, Path.Combine(DrivePath, "Windows\\System32\\config\\SYSTEM"), Path.Combine(DrivePath, "Windows\\System32\\config\\SOFTWARE"), Folders, folderRegexes);
+            _ = ModifyRegistry(inboxINFElements, Path.Combine(DrivePath, "Windows\\System32\\config\\SYSTEM"), Path.Combine(DrivePath, "Windows\\System32\\config\\SOFTWARE"), Folders, folderRegexes);
         }
 
-        private static Regex BuildRegexForDriverStoreFolderName(string driverStoreFolderName)
+        private static bool ContainsNeutralDriverStoreFolderName(string str, string neutralDriverStoreFolderName, out string match)
         {
-            string neutralDriverStoreFolderName = string.Join('_', driverStoreFolderName.Split('_')[..driverStoreFolderName.Count(y => y == '_')]) + '_';
-            string escapedNeutralDriverStoreFolderName = Regex.Escape(neutralDriverStoreFolderName);
+            match = null;
 
-            return new Regex(escapedNeutralDriverStoreFolderName + "[a-fA-F0-9]{16}");
+            if (str == null)
+            {
+                return false;
+            }
+
+            if (str.Contains(neutralDriverStoreFolderName, StringComparison.InvariantCultureIgnoreCase))
+            {
+                string escapedNeutralDriverStoreFolderName = Regex.Escape(neutralDriverStoreFolderName);
+                Regex regex = new($$"""{{escapedNeutralDriverStoreFolderName}}[a-fA-F0-9]{16}""");
+                if (regex.IsMatch(str))
+                {
+                    match = regex.Match(str).Value;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
-        private static void FixDriverStorePathsInRegistryValue(Regex inboxRegex, RegistryKey registryKey, string registryValue, string[] currentDriverStoreNames, Regex[] folderRegexes)
+        private static void FixDriverStorePathsInRegistryValue(string[] inboxINFElements, RegistryKey registryKey, string registryValue, string[] currentDriverStoreNames, string[] folderRegexes)
         {
             if (registryKey?.GetValueNames().Any(x => x.Equals(registryValue, StringComparison.InvariantCultureIgnoreCase)) == true)
             {
@@ -48,15 +65,17 @@ namespace DriverUpdater
                         {
                             string og = (string)registryKey.GetValue(registryValue);
 
+                            if (inboxINFElements.Any(x => og.Contains(x, StringComparison.InvariantCultureIgnoreCase)))
+                            {
+                                return;
+                            }
+
                             for (int i = 0; i < folderRegexes.Length; i++)
                             {
-                                Regex regex = folderRegexes[i];
                                 string matchingString = currentDriverStoreNames[i];
 
-                                if (regex.IsMatch(og) && !inboxRegex.IsMatch(og))
+                                if (ContainsNeutralDriverStoreFolderName(og, folderRegexes[i], out string currentValue))
                                 {
-                                    string currentValue = regex.Match(og).Value;
-
                                     if (currentValue != matchingString)
                                     {
                                         Logging.Log($"Updated {currentValue} to {matchingString} in {registryKey.Name}\\{registryValue}");
@@ -74,15 +93,17 @@ namespace DriverUpdater
                         {
                             string og = (string)registryKey.GetValue(registryValue);
 
+                            if (inboxINFElements.Any(x => og.Contains(x, StringComparison.InvariantCultureIgnoreCase)))
+                            {
+                                return;
+                            }
+
                             for (int i = 0; i < folderRegexes.Length; i++)
                             {
-                                Regex regex = folderRegexes[i];
                                 string matchingString = currentDriverStoreNames[i];
 
-                                if (regex.IsMatch(og) && !inboxRegex.IsMatch(og))
+                                if (ContainsNeutralDriverStoreFolderName(og, folderRegexes[i], out string currentValue))
                                 {
-                                    string currentValue = regex.Match(og).Value;
-
                                     if (currentValue != matchingString)
                                     {
                                         Logging.Log($"Updated {currentValue} to {matchingString} in {registryKey.Name}\\{registryValue}");
@@ -106,15 +127,17 @@ namespace DriverUpdater
                             {
                                 string og = ogvals[j];
 
+                                if (inboxINFElements.Any(x => og.Contains(x, StringComparison.InvariantCultureIgnoreCase)))
+                                {
+                                    continue;
+                                }
+
                                 for (int i = 0; i < folderRegexes.Length; i++)
                                 {
-                                    Regex regex = folderRegexes[i];
                                     string matchingString = currentDriverStoreNames[i];
 
-                                    if (regex.IsMatch(og) && !inboxRegex.IsMatch(og))
+                                    if (ContainsNeutralDriverStoreFolderName(og, folderRegexes[i], out string currentValue))
                                     {
-                                        string currentValue = regex.Match(og).Value;
-
                                         if (currentValue != matchingString)
                                         {
                                             Logging.Log($"Updated {currentValue} to {matchingString} in {registryKey.Name}\\{registryValue}");
@@ -139,33 +162,33 @@ namespace DriverUpdater
             }
         }
 
-        private static void CrawlInRegistryKey(Regex inboxRegex, RegistryKey registryKey, string[] currentDriverStoreNames, Regex[] folderRegexes)
+        private static void CrawlInRegistryKey(string[] inboxINFElements, RegistryKey registryKey, string[] currentDriverStoreNames, string[] folderRegexes)
         {
             if (registryKey != null)
             {
                 foreach (string subRegistryValue in registryKey.GetValueNames())
                 {
-                    if (inboxRegex.IsMatch(subRegistryValue))
+                    if (inboxINFElements.Any(x => subRegistryValue.Contains(x, StringComparison.InvariantCultureIgnoreCase)))
                     {
                         continue;
                     }
 
-                    FixDriverStorePathsInRegistryValue(inboxRegex, registryKey, subRegistryValue, currentDriverStoreNames, folderRegexes);
+                    FixDriverStorePathsInRegistryValue(inboxINFElements, registryKey, subRegistryValue, currentDriverStoreNames, folderRegexes);
                 }
 
                 foreach (RegistryKey subRegistryKey in registryKey.SubKeys)
                 {
-                    if (inboxRegex.IsMatch(subRegistryKey.Name))
+                    if (inboxINFElements.Any(x => subRegistryKey.Name.Contains(x, StringComparison.InvariantCultureIgnoreCase)))
                     {
                         continue;
                     }
 
-                    CrawlInRegistryKey(inboxRegex, subRegistryKey, currentDriverStoreNames, folderRegexes);
+                    CrawlInRegistryKey(inboxINFElements, subRegistryKey, currentDriverStoreNames, folderRegexes);
                 }
             }
         }
 
-        internal static bool ModifyRegistry(Regex inboxRegex, string systemHivePath, string softwareHivePath, string[] currentDriverStoreNames, Regex[] folderRegexes)
+        internal static bool ModifyRegistry(string[] inboxINFElements, string systemHivePath, string softwareHivePath, string[] currentDriverStoreNames, string[] folderRegexes)
         {
             try
             {
@@ -177,7 +200,7 @@ namespace DriverUpdater
                     ), DiscUtils.Streams.Ownership.Dispose))
                 {
                     Logging.Log("Processing SYSTEM hive");
-                    CrawlInRegistryKey(inboxRegex, hive.Root, currentDriverStoreNames, folderRegexes);
+                    CrawlInRegistryKey(inboxINFElements, hive.Root, currentDriverStoreNames, folderRegexes);
                 }
 
                 using (RegistryHive hive = new(
@@ -188,7 +211,7 @@ namespace DriverUpdater
                     ), DiscUtils.Streams.Ownership.Dispose))
                 {
                     Logging.Log("Processing SOFTWARE hive");
-                    CrawlInRegistryKey(inboxRegex, hive.Root, currentDriverStoreNames, folderRegexes);
+                    CrawlInRegistryKey(inboxINFElements, hive.Root, currentDriverStoreNames, folderRegexes);
                 }
             }
             catch

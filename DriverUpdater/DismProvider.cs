@@ -107,10 +107,10 @@ namespace DriverUpdater
             long Progress = 0;
             DateTime startTime = DateTime.Now;
 
-            foreach ((string AppXFilePath, string LicenseFilePath) app in applicationPackages)
+            foreach ((string AppXFilePath, string LicenseFilePath) in applicationPackages)
             {
-                Console.Title = $"Driver Updater - Installing App Package - {app.AppXFilePath}";
-                Logging.ShowProgress(Progress++, applicationPackages.Count(), startTime, false);
+                Console.Title = $"Driver Updater - Installing App Package - {AppXFilePath}";
+                Logging.ShowProgress(Progress++, applicationPackages.Count(), startTime, false, "Installing App Packages...", Path.GetFileName(AppXFilePath));
 
                 const int maxAttempts = 3;
                 int currentFails = 0;
@@ -120,7 +120,7 @@ namespace DriverUpdater
                 {
                     try
                     {
-                        DismApi.AddProvisionedAppxPackage(session, app.AppXFilePath, null, !string.IsNullOrEmpty(app.LicenseFilePath) ? app.LicenseFilePath : null, null);
+                        DismApi.AddProvisionedAppxPackage(session, AppXFilePath, null, !string.IsNullOrEmpty(LicenseFilePath) ? LicenseFilePath : null, null);
                     }
                     catch (Exception e)
                     {
@@ -142,13 +142,13 @@ namespace DriverUpdater
                 if ((ntStatus & 0x80000000) != 0 && ntStatus != 0xC1570118)
                 {
                     Logging.Log("");
-                    Logging.Log($"DismApi->AddProvisionedAppxPackage: ntStatus=0x{ntStatus:X8}, app={app.AppXFilePath}", Logging.LoggingLevel.Error);
+                    Logging.Log($"DismApi->AddProvisionedAppxPackage: ntStatus=0x{ntStatus:X8}, app={AppXFilePath}", Logging.LoggingLevel.Error);
 
                     //return false;
                 }
             }
 
-            Logging.ShowProgress(applicationPackages.Count(), applicationPackages.Count(), startTime, false);
+            Logging.ShowProgress(applicationPackages.Count(), applicationPackages.Count(), startTime, false, "Installing App Packages...", "");
             Logging.Log("");
 
             return true;
@@ -167,7 +167,7 @@ namespace DriverUpdater
             foreach (string driver in existingOEMDrivers)
             {
                 Console.Title = $"Driver Updater - RemoveOfflineDriver - {driver}";
-                Logging.ShowProgress(Progress++, existingOEMDrivers.Length, startTime, false);
+                Logging.ShowProgress(Progress++, existingOEMDrivers.Length, startTime, false, "Uninstalling drivers...", driver);
 
                 uint ntStatus = RemoveOfflineDriver(driver);
                 if ((ntStatus & 0x80000000) != 0)
@@ -178,7 +178,7 @@ namespace DriverUpdater
                     //return false;
                 }
             }
-            Logging.ShowProgress(existingOEMDrivers.Length, existingOEMDrivers.Length, startTime, false);
+            Logging.ShowProgress(existingOEMDrivers.Length, existingOEMDrivers.Length, startTime, false, "Uninstalling drivers...", "");
             Logging.Log("");
 
             return true;
@@ -196,12 +196,7 @@ namespace DriverUpdater
                 //return false;
             }
 
-            if (!UninstallDrivers(existingOEMDrivers))
-            {
-                return false;
-            }
-
-            return true;
+            return UninstallDrivers(existingOEMDrivers);
         }
 
         public bool InstallDrivers(IEnumerable<string> infFiles)
@@ -216,7 +211,7 @@ namespace DriverUpdater
             {
                 // First add the driver package to the image
                 Console.Title = $"Driver Updater - DismApi->AddDriver - {inf}";
-                Logging.ShowProgress(Progress++, infFiles.Count(), startTime, false);
+                Logging.ShowProgress(Progress++, infFiles.Count(), startTime, false, "Installing new drivers...", Path.GetFileName(inf));
 
                 const int maxAttempts = 3;
                 int currentFails = 0;
@@ -246,7 +241,7 @@ namespace DriverUpdater
                     //return false;
                 }
             }
-            Logging.ShowProgress(infFiles.Count(), infFiles.Count(), startTime, false);
+            Logging.ShowProgress(infFiles.Count(), infFiles.Count(), startTime, false, "Installing new drivers...", "");
             Logging.Log("");
 
             return true;
@@ -261,10 +256,10 @@ namespace DriverUpdater
             long Progress = 0;
             DateTime startTime = DateTime.Now;
 
-            foreach ((string AppXFilePath, string LicenseFilePath) app in appDependencyPackages)
+            foreach ((string AppXFilePath, string LicenseFilePath) in appDependencyPackages)
             {
-                Console.Title = $"Driver Updater - Installing App Framework Package - {app.AppXFilePath}";
-                Logging.ShowProgress(Progress++, appDependencyPackages.Count(), startTime, false);
+                Console.Title = $"Driver Updater - Installing App Framework Package - {AppXFilePath}";
+                Logging.ShowProgress(Progress++, appDependencyPackages.Count(), startTime, false, "Installing App Framework Packages...", Path.GetFileName(AppXFilePath));
 
                 const int maxAttempts = 3;
                 int currentFails = 0;
@@ -274,7 +269,7 @@ namespace DriverUpdater
                 {
                     try
                     {
-                        DismApi.AddProvisionedAppxPackage(session, app.AppXFilePath, null, !string.IsNullOrEmpty(app.LicenseFilePath) ? app.LicenseFilePath : null, null);
+                        DismApi.AddProvisionedAppxPackage(session, AppXFilePath, null, !string.IsNullOrEmpty(LicenseFilePath) ? LicenseFilePath : null, null);
                     }
                     catch (Exception e)
                     {
@@ -296,13 +291,13 @@ namespace DriverUpdater
                 if ((ntStatus & 0x80000000) != 0 && ntStatus != 0xC1570118)
                 {
                     Logging.Log("");
-                    Logging.Log($"DismApi->AddProvisionedAppxPackage: ntStatus=0x{ntStatus:X8}, app={app.AppXFilePath}", Logging.LoggingLevel.Error);
+                    Logging.Log($"DismApi->AddProvisionedAppxPackage: ntStatus=0x{ntStatus:X8}, app={AppXFilePath}", Logging.LoggingLevel.Error);
 
                     //return false;
                 }
             }
 
-            Logging.ShowProgress(appDependencyPackages.Count(), appDependencyPackages.Count(), startTime, false);
+            Logging.ShowProgress(appDependencyPackages.Count(), appDependencyPackages.Count(), startTime, false, "Installing App Framework Packages...", "");
             Logging.Log("");
 
             return true;

@@ -20,17 +20,22 @@
  * SOFTWARE.
  */
 using CommandLine;
+using DriverUpdater.ImageUpdate;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Xml.Serialization;
 
 namespace DriverUpdater
 {
     internal static class Program
     {
+        internal static XmlSerializer serializer;
+
         private static void PrintLogo()
         {
             Logging.Log($"DriverUpdater {Assembly.GetExecutingAssembly().GetName().Version} - Cleans and Installs a new set of drivers onto a Windows Image");
@@ -44,6 +49,8 @@ namespace DriverUpdater
 
         private static int Main(string[] args)
         {
+            serializer = new XmlSerializer(typeof(FeatureManifest));
+
             return Parser.Default.ParseArguments<CLIOptions>(args).MapResult(
               (CLIOptions opts) =>
               {
@@ -57,9 +64,20 @@ namespace DriverUpdater
         private static void DriverUpdaterAction(string Definition, string DriverRepo, string DevicePart)
         {
             // Normalize Paths first
-            Definition = Path.GetFullPath(Definition);
-            DriverRepo = Path.GetFullPath(DriverRepo).TrimEnd(Path.PathSeparator);
-            DevicePart = Path.GetFullPath(DevicePart).TrimEnd(Path.PathSeparator);
+            if (!string.IsNullOrEmpty(Definition))
+            {
+                Definition = Path.GetFullPath(Definition);
+            }
+
+            if (!string.IsNullOrEmpty(DriverRepo))
+            {
+                DriverRepo = Path.GetFullPath(DriverRepo).TrimEnd(Path.PathSeparator);
+            }
+
+            if (!string.IsNullOrEmpty(DevicePart))
+            {
+                DevicePart = Path.GetFullPath(DevicePart).TrimEnd(Path.PathSeparator);
+            }
 
             if (!File.Exists(Definition))
             {
@@ -97,59 +115,75 @@ namespace DriverUpdater
                     return;
                 }
 
-                try
+                WizardUx progress = new();
+                _ = new Progress((object sender, DoWorkEventArgs e) =>
                 {
-                    bool upgrade = ResealForPnPFirstBootUx(DevicePart);
-                    // true = first boot completed
-                    // false = first boot not completed
-
-                    if (upgrade)
+                    Logging.progress = progress;
+                    try
                     {
-                        Logging.Log("The device has already been booted once. Reinstalling Board Support Package.");
+                        bool upgrade = ResealForPnPFirstBootUx(DevicePart);
+                        // true = first boot completed
+                        // false = first boot not completed
+
+                        if (upgrade)
+                        {
+                            Logging.Log("The device has already been booted once. Reinstalling Board Support Package.");
+                        }
+                        else
+                        {
+                            Logging.Log("The device has not been booted yet. Installing Board Support Package for the first time prior to first boot.");
+                        }
+
+                        if (upgrade)
+                        {
+                            _ = UninstallDrivers(DevicePart, upgrade);
+
+                            Logging.LogMilestone("Fixing potential registry left overs");
+                            RegistryFixer.FixLeftOvers(DevicePart);
+                        }
+
+                        _ = InstallDrivers(Definition, DriverRepo, DevicePart);
+
+                        if (upgrade)
+                        {
+                            Logging.LogMilestone("Fixing potential registry left overs");
+                            RegistryLeftoverFixer.FixRegistryPaths(DevicePart);
+                        }
+
+                        Logging.LogMilestone("Enabling Cks");
+                        new CksLicensing(DevicePart).SetLicensedState();
+
+                        _ = InstallApps(Definition, DriverRepo, DevicePart, upgrade);
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        Logging.Log("The device has not been booted yet. Installing Board Support Package for the first time prior to first boot.");
+                        Logging.LogMilestone("Something happened!", Logging.LoggingLevel.Error);
+                        Logging.Log(ex.ToString(), Logging.LoggingLevel.Error);
                     }
 
-                    if (upgrade)
-                    {
-                        UninstallDrivers(DevicePart, upgrade);
-
-                        Logging.Log("Fixing potential registry left overs");
-                        RegistryFixer.FixLeftOvers(DevicePart);
-                    }
-
-                    InstallDrivers(Definition, DriverRepo, DevicePart);
-
-                    if (upgrade)
-                    {
-                        Logging.Log("Fixing potential registry left overs");
-                        RegistryLeftoverFixer.FixRegistryPaths(DevicePart);
-                    }
-
-                    Logging.Log("Enabling Cks");
-                    new CksLicensing(DevicePart).SetLicensedState();
-
-                    InstallApps(Definition, DriverRepo, DevicePart, upgrade);
-                }
-                catch (Exception ex)
-                {
-                    Logging.Log("Something happened!", Logging.LoggingLevel.Error);
-                    Logging.Log(ex.ToString(), Logging.LoggingLevel.Error);
-                }
+                    progress.Close();
+                }, progress);
             }
             else
             {
-                try
+                WizardUx progress = new();
+                _ = new Progress((object sender, DoWorkEventArgs e) =>
                 {
-                    _ = OnlineInstall(Definition, DriverRepo);
-                }
-                catch (Exception ex)
-                {
-                    Logging.Log("Something happened!", Logging.LoggingLevel.Error);
-                    Logging.Log(ex.ToString(), Logging.LoggingLevel.Error);
-                }
+                    Logging.progress = progress;
+                    try
+                    {
+                        _ = OnlineInstall(Definition, DriverRepo);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logging.progress.Close();
+                        Logging.progress = null;
+                        Logging.LogMilestone("Something happened!", Logging.LoggingLevel.Error);
+                        Logging.Log(ex.ToString(), Logging.LoggingLevel.Error);
+                    }
+
+                    progress.Close();
+                }, progress);
             }
 
             Logging.Log("Done!");
@@ -162,7 +196,7 @@ namespace DriverUpdater
             DiscUtils.Registry.RegistryKey hwconf = hive.Root.OpenSubKey("HardwareConfig");
             if (hwconf != null)
             {
-                Logging.Log("Resealing image to PnP FirstBootUx...");
+                Logging.LogMilestone("Resealing image to PnP FirstBootUx...");
                 foreach (string subkey in hwconf.GetSubKeyNames())
                 {
                     hwconf.DeleteSubKeyTree(subkey);
@@ -224,7 +258,7 @@ namespace DriverUpdater
 
         private static bool InstallDrivers(string Definition, string DriverRepo, string DrivePath)
         {
-            Logging.Log("Reading definition file...");
+            Logging.LogMilestone("Reading definition file...");
             DefinitionParser definitionParser = new(Definition);
 
             bool everythingExists = true;
@@ -277,7 +311,7 @@ namespace DriverUpdater
 
         private static bool InstallApps(string Definition, string DriverRepo, string DrivePath, bool IsUpgrade)
         {
-            Logging.Log("Reading definition file...");
+            Logging.LogMilestone("Reading definition file...");
             DefinitionParser definitionParser = new(Definition);
 
             bool everythingExists = true;
@@ -331,7 +365,7 @@ namespace DriverUpdater
 
         private static bool OnlineInstall(string Definition, string DriverRepo)
         {
-            Logging.Log("Reading definition file...");
+            Logging.LogMilestone("Reading definition file...");
             DefinitionParser definitionParser = new(Definition);
 
             bool everythingExists = true;

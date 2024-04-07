@@ -15,16 +15,6 @@ namespace DriverUpdater.ImageUpdate
         {
             get; set;
         }
-        [XmlElement(ElementName = "BasePackages", Namespace = "http://schemas.microsoft.com/embedded/2004/10/ImageUpdate")]
-        public BasePackages BasePackages
-        {
-            get; set;
-        }
-        [XmlElement(ElementName = "DeviceLayoutPackages", Namespace = "http://schemas.microsoft.com/embedded/2004/10/ImageUpdate")]
-        public DeviceLayoutPackages DeviceLayoutPackages
-        {
-            get; set;
-        }
         [XmlAttribute(AttributeName = "xsi", Namespace = "http://www.w3.org/2000/xmlns/")]
         public string Xsi
         {
