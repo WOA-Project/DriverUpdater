@@ -38,16 +38,19 @@ namespace DriverUpdater
 
         public static void ShowProgress(long CurrentProgress, long TotalProgress, DateTime startTime, bool DisplayRed, string StatusTitle, string StatusMessage)
         {
-            progress?.ReportProgress((int)(CurrentProgress * 100 / TotalProgress), StatusTitle, StatusMessage);
+            int ProgressPercentage = TotalProgress == 0 ? 100 : (int)(CurrentProgress * 100 / TotalProgress);
+            progress?.ReportProgress(ProgressPercentage, StatusTitle, StatusMessage);
 
             DateTime now = DateTime.Now;
             TimeSpan timeSoFar = now - startTime;
 
             TimeSpan remaining = new(0);
 
+            double milliSecondsRemaining = (TotalProgress - CurrentProgress) == 0 ? 0 : timeSoFar.TotalMilliseconds / CurrentProgress * (TotalProgress - CurrentProgress);
+
             try
             {
-                remaining = TimeSpan.FromMilliseconds(timeSoFar.TotalMilliseconds / CurrentProgress * (TotalProgress - CurrentProgress));
+                remaining = TimeSpan.FromMilliseconds(milliSecondsRemaining);
             }
             catch { }
 
@@ -57,7 +60,7 @@ namespace DriverUpdater
                 CurrentProgress = 1;
             }
 
-            Log(string.Format("{0} {1:hh\\:mm\\:ss\\.f}", GetDismLikeProgBar((int)(CurrentProgress * 100 / TotalProgress)), remaining, remaining.TotalHours, remaining.Minutes, remaining.Seconds, remaining.Milliseconds), severity: DisplayRed ? LoggingLevel.Warning : LoggingLevel.Information, returnline: false, doNotUseGui: true);
+            Log(string.Format("{0} {1:hh\\:mm\\:ss\\.f}", GetDismLikeProgBar(ProgressPercentage), remaining, remaining.TotalHours, remaining.Minutes, remaining.Seconds, remaining.Milliseconds), severity: DisplayRed ? LoggingLevel.Warning : LoggingLevel.Information, returnline: false, doNotUseGui: true);
         }
 
         private static string GetDismLikeProgBar(int perc)

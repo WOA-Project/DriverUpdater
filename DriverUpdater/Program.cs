@@ -213,43 +213,47 @@ namespace DriverUpdater
             return false;
         }
 
+        private static void RegistryNotFlushedWorkaround(string DevicePart)
+        {
+            using Process proc = new()
+            {
+                StartInfo = new ProcessStartInfo("reg.exe", $"load HKLM\\DriverUpdater {Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM")}")
+                {
+                    UseShellExecute = false
+                }
+            };
+            _ = proc.Start();
+            proc.WaitForExit();
+            if (proc.ExitCode != 0)
+            {
+                throw new Exception("Couldn't load registry hive");
+            }
+
+            using Process proc2 = new()
+            {
+                StartInfo = new ProcessStartInfo("reg.exe", "unload HKLM\\DriverUpdater")
+                {
+                    UseShellExecute = false
+                }
+            };
+            _ = proc2.Start();
+            proc2.WaitForExit();
+            if (proc2.ExitCode != 0)
+            {
+                throw new Exception("Couldn't unload registry hive");
+            }
+        }
+
         private static bool ResealForPnPFirstBootUx(string DevicePart)
         {
-            bool result = false;
+            bool result;
             try
             {
                 result = ResealForPnPFirstBootUxInternal(DevicePart);
             }
-            catch (NotImplementedException)
+            catch (IOException)
             {
-                using Process proc = new()
-                {
-                    StartInfo = new ProcessStartInfo("reg.exe", $"load HKLM\\DriverUpdater {Path.Combine(DevicePart, "Windows\\System32\\config\\SYSTEM")}")
-                    {
-                        UseShellExecute = false
-                    }
-                };
-                _ = proc.Start();
-                proc.WaitForExit();
-                if (proc.ExitCode != 0)
-                {
-                    throw new Exception("Couldn't load registry hive");
-                }
-
-                using Process proc2 = new()
-                {
-                    StartInfo = new ProcessStartInfo("reg.exe", "unload HKLM\\DriverUpdater")
-                    {
-                        UseShellExecute = false
-                    }
-                };
-                _ = proc2.Start();
-                proc2.WaitForExit();
-                if (proc2.ExitCode != 0)
-                {
-                    throw new Exception("Couldn't unload registry hive");
-                }
-
+                RegistryNotFlushedWorkaround(DevicePart);
                 result = ResealForPnPFirstBootUxInternal(DevicePart);
             }
 
