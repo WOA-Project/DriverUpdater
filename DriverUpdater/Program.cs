@@ -39,11 +39,15 @@ namespace DriverUpdater
         private static void PrintLogo()
         {
             Logging.Log($"DriverUpdater {Assembly.GetExecutingAssembly().GetName().Version} - Cleans and Installs a new set of drivers onto a Windows Image");
-            Logging.Log("Copyright (c) 2017-2023, The LumiaWOA and DuoWOA Authors");
+            Logging.Log("Copyright (c) 2017-2024, The LumiaWOA and DuoWOA Authors");
             Logging.Log("https://github.com/WOA-Project/DriverUpdater");
             Logging.Log("");
             Logging.Log("This program comes with ABSOLUTELY NO WARRANTY.");
             Logging.Log("This is free software, and you are welcome to redistribute it under certain conditions.");
+            Logging.Log("");
+            Logging.Log("This tool is designed for use on Surface Duo and Lumia 950 family of devices. Other projects may use this tool as well, please know that if you get any issue with this tool on a device that is not part of the Surface Duo or Lumia 950 of devices, we do not provide support for you. Please file issues in such case to the person that instructed you to use this tool instead. We only provide support to users of Surface Duo or Lumia 950 family of devices and the core tool functionality itself. Issues related to other driver packages, are not this repository scope. We WILL ignore your bug reports if you use this tool outside of its designed scope. You have been warned.");
+            Logging.Log("");
+            Logging.Log("This tool is part of the WOA Project organization established in 2017.");
             Logging.Log("");
         }
 
