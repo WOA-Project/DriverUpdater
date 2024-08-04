@@ -19,11 +19,21 @@ namespace DriverUpdater
 
         private static bool IsMatching(string value)
         {
+            if (value == null)
+            {
+                return false;
+            }
+
             return regex.IsMatch(value) && !IsAntiMatching(value);
         }
 
         private static bool IsAntiMatching(string value)
         {
+            if (value == null)
+            {
+                return false;
+            }
+
             return antiRegex.IsMatch(value);
         }
 
@@ -171,7 +181,7 @@ namespace DriverUpdater
 
         internal static bool ModifyRegistryForLeftOvers(string systemHivePath, string softwareHivePath)
         {
-            try
+            //try
             {
                 using (RegistryHive hive = new(
                     File.Open(
@@ -181,6 +191,24 @@ namespace DriverUpdater
                     ), DiscUtils.Streams.Ownership.Dispose))
                 {
                     Logging.Log("Processing SYSTEM hive");
+
+                    RegistryKey EnumKey = hive.Root.OpenSubKey("ControlSet001\\Enum");
+                    foreach (string subKey in EnumKey.GetSubKeyNames())
+                    {
+                        if (subKey.Equals("ROOT", StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        Logging.Log($"Deleting Sub Key Tree {EnumKey.Name}\\{subKey}");
+                        EnumKey.DeleteSubKeyTree(subKey);
+                    }
+
+                    if (hive.Root.OpenSubKey("HardwareConfig") != null)
+                    {
+                        EnumKey.DeleteSubKeyTree("HardwareConfig");
+                    }
+
                     CrawlInRegistryKeyForLeftOvers(hive.Root);
                 }
 
@@ -195,14 +223,14 @@ namespace DriverUpdater
                     CrawlInRegistryKeyForLeftOvers(hive.Root);
                 }
             }
-            catch
-            {
-                return false;
-            }
+            //catch
+            //{
+            //    return false;
+            //}
             return true;
         }
 
-        [GeneratedRegex("""(.*oem[0-9]+\.inf.*)|(.*(QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_|qcom|mshw|ven_qcom&dev_|ven_mshw&dev_)[0-9A-Fa-f]{4}.*)|(.*surface.*duo.*inf)|(.*\\qc.*)|(.*\\surface.*)""")]
+        [GeneratedRegex("""(.*oem[0-9]+\.inf.*)|(.*(QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_|qcom|mshw|ven_qcom&dev_|ven_mshw&dev_)[0-9A-Fa-f]{4}.*)|(.*VID_045E&PID_0C01.*)|(.*VID_045E&PID_0C1D.*)|(.*surface.*duo.*inf)|(.*\\qc.*)|(.*\\surface.*)|(.*vid_045e&pid_0c01.*)|(.*vid_045e&pid_0c1d.*)""")]
         private static partial Regex DeviceRegex();
 
         [GeneratedRegex("""(.*(QCOM|qcom)((24[0-9A-Fa-f][0-9A-Fa-f])|(7002)|((FFE|ffe)[0-9A-Fa-f])).*)|(.*qcap.*)|(.*qcursext.*)|(.*hidspi.*)|(.*sdstor.*)|(.*sdbus.*)|(.*storufs.*)|(.*u..chipidea.*)|(.*u..synopsys.*)|(.*qc.*_i\.inf.*)""")]
