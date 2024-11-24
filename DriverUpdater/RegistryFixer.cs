@@ -19,21 +19,11 @@ namespace DriverUpdater
 
         private static bool IsMatching(string value)
         {
-            if (value == null)
-            {
-                return false;
-            }
-
             return regex.IsMatch(value) && !IsAntiMatching(value);
         }
 
         private static bool IsAntiMatching(string value)
         {
-            if (value == null)
-            {
-                return false;
-            }
-
             return antiRegex.IsMatch(value);
         }
 
@@ -56,6 +46,11 @@ namespace DriverUpdater
                         {
                             string og = (string)registryKey.GetValue(registryValue);
 
+                            if (og == null)
+                            {
+                                break;
+                            }
+
                             if (IsMatching(og))
                             {
                                 string currentValue = GetMatch(og).Value;
@@ -76,6 +71,11 @@ namespace DriverUpdater
                         {
                             string og = (string)registryKey.GetValue(registryValue);
 
+                            if (og == null)
+                            {
+                                break;
+                            }
+
                             if (IsMatching(og))
                             {
                                 string currentValue = GetMatch(og).Value;
@@ -95,12 +95,23 @@ namespace DriverUpdater
                     case RegistryValueType.MultiString:
                         {
                             string[] ogvals = (string[])registryKey.GetValue(registryValue);
+
+                            if (ogvals == null)
+                            {
+                                break;
+                            }
+
                             List<string> newVals = [];
 
                             bool updated = false;
 
                             foreach (string og in ogvals)
                             {
+                                if (og == null)
+                                {
+                                    continue;
+                                }
+
                                 if (IsMatching(og))
                                 {
                                     string currentValue = GetMatch(og).Value;
@@ -141,26 +152,36 @@ namespace DriverUpdater
         {
             if (registryKey != null)
             {
-                foreach (string subRegistryValue in registryKey.GetValueNames())
+                foreach (string subRegistryValueName in registryKey.GetValueNames())
                 {
-                    if (IsMatching(subRegistryValue))
-                    {
-                        Logging.Log($"Deleting Value {registryKey.Name}\\{subRegistryValue}");
-                        registryKey.DeleteValue(subRegistryValue);
-
-                        continue;
-                    }
-
-                    if (IsAntiMatching(subRegistryValue))
+                    if (subRegistryValueName == null)
                     {
                         continue;
                     }
 
-                    FixDriverStorePathsInRegistryValueForLeftOvers(registryKey, subRegistryValue);
+                    if (IsMatching(subRegistryValueName))
+                    {
+                        Logging.Log($"Deleting Value {registryKey.Name}\\{subRegistryValueName}");
+                        registryKey.DeleteValue(subRegistryValueName);
+
+                        continue;
+                    }
+
+                    if (IsAntiMatching(subRegistryValueName))
+                    {
+                        continue;
+                    }
+
+                    FixDriverStorePathsInRegistryValueForLeftOvers(registryKey, subRegistryValueName);
                 }
 
                 foreach (string subRegistryKey in registryKey.GetSubKeyNames())
                 {
+                    if (subRegistryKey == null)
+                    {
+                        continue;
+                    }
+
                     if (IsMatching(subRegistryKey))
                     {
                         Logging.Log($"Deleting Sub Key Tree {registryKey.Name}\\{subRegistryKey}");
