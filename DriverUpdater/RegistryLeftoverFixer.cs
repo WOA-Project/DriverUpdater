@@ -221,7 +221,7 @@ namespace DriverUpdater
             return true;
         }
 
-        [GeneratedRegex("oem[0-9]+.inf")]
-        private static partial Regex OEMInfRegex();
+        /*[GeneratedRegex("oem[0-9]+.inf")]
+        private static partial Regex OEMInfRegex();*/
     }
 }
