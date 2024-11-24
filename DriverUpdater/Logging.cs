@@ -82,6 +82,11 @@ namespace DriverUpdater
 
         public static void LogMilestone(string message, LoggingLevel severity = LoggingLevel.Information, bool returnline = true, bool doNotUseGui = false)
         {
+            if (!doNotUseGui && Program.DISABLE_GUI)
+            {
+                doNotUseGui = true;
+            }
+
             lock (lockObj)
             {
                 if (progress != null && !doNotUseGui)
@@ -130,6 +135,11 @@ namespace DriverUpdater
 
         public static void Log(string message, LoggingLevel severity = LoggingLevel.Information, bool returnline = true, bool doNotUseGui = false)
         {
+            if (!doNotUseGui && Program.DISABLE_GUI)
+            {
+                doNotUseGui = true;
+            }
+
             lock (lockObj)
             {
                 if (progress != null && !doNotUseGui)

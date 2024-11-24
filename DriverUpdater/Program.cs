@@ -34,6 +34,8 @@ namespace DriverUpdater
 {
     internal static class Program
     {
+        internal static bool DISABLE_GUI = false;
+
         internal static XmlSerializer serializer;
 
         private static void PrintLogo()
