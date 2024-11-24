@@ -121,8 +121,14 @@ namespace DriverUpdater
                     return;
                 }
 
-                WizardUx progress = new();
-                _ = new Progress((object sender, DoWorkEventArgs e) =>
+                ProgressInterface progress = null;
+
+                if (!DISABLE_GUI)
+                {
+                    progress = new WizardUx();
+                }
+
+                void OfflineOperation()
                 {
                     Logging.progress = progress;
                     try
@@ -163,17 +169,40 @@ namespace DriverUpdater
                     }
                     catch (Exception ex)
                     {
+                        if (Logging.progress != null)
+                        {
+                            Logging.progress.Close();
+                            Logging.progress = null;
+                        }
                         Logging.LogMilestone("Something happened!", Logging.LoggingLevel.Error);
                         Logging.Log(ex.ToString(), Logging.LoggingLevel.Error);
                     }
 
                     progress.Close();
-                }, progress);
+                }
+
+                if (DISABLE_GUI)
+                {
+                    OfflineOperation();
+                }
+                else
+                {
+                    _ = new Progress((object sender, DoWorkEventArgs e) =>
+                    {
+                        OfflineOperation();
+                    }, progress);
+                }
             }
             else
             {
-                WizardUx progress = new();
-                _ = new Progress((object sender, DoWorkEventArgs e) =>
+                ProgressInterface progress = null;
+
+                if (!DISABLE_GUI)
+                {
+                    progress = new WizardUx();
+                }
+
+                void OnlineOperation()
                 {
                     Logging.progress = progress;
                     try
@@ -182,14 +211,29 @@ namespace DriverUpdater
                     }
                     catch (Exception ex)
                     {
-                        Logging.progress.Close();
-                        Logging.progress = null;
+                        if (Logging.progress != null)
+                        {
+                            Logging.progress.Close();
+                            Logging.progress = null;
+                        }
                         Logging.LogMilestone("Something happened!", Logging.LoggingLevel.Error);
                         Logging.Log(ex.ToString(), Logging.LoggingLevel.Error);
                     }
 
                     progress.Close();
-                }, progress);
+                }
+
+                if (DISABLE_GUI)
+                {
+                    OnlineOperation();
+                }
+                else
+                {
+                    _ = new Progress((object sender, DoWorkEventArgs e) =>
+                    {
+                        OnlineOperation();
+                    }, progress);
+                }
             }
 
             Logging.Log("Done!");
