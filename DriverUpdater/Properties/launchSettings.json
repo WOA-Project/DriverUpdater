@@ -1,9 +1,0 @@
-{
-  "profiles": {
-    "DriverUpdater": {
-      "commandName": "Project",
-      "commandLineArgs": "-r C:\\Users\\Gus\\Documents\\Github\\SurfaceDuo-Drivers -d C:\\Users\\Gus\\Documents\\Github\\SurfaceDuo-Drivers\\definitions\\Desktop\\ARM64\\Internal\\epsilon.txt -p K:",
-      "nativeDebugging": true
-    }
-  }
-}
