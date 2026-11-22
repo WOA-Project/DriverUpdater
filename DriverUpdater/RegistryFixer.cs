@@ -2,259 +2,311 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace DriverUpdater
 {
     public partial class RegistryFixer
     {
-        private static readonly Regex regex = DeviceRegex();
-        private static readonly Regex antiRegex = AntiDeviceRegex();
-
-        public static void FixLeftOvers(string DrivePath)
+        public static void FixLeftOvers(string drivePath)
         {
-            _ = ModifyRegistryForLeftOvers(Path.Combine(DrivePath, "Windows\\System32\\config\\SYSTEM"), Path.Combine(DrivePath, "Windows\\System32\\config\\SOFTWARE"));
+            _ = ModifyRegistryForLeftOvers(Path.Combine(drivePath, @"Windows\System32\config\SYSTEM"), Path.Combine(drivePath, @"Windows\System32\config\SOFTWARE"));
         }
 
-        private static bool IsMatching(string value)
+        #region Matching
+
+        private static bool IsLikelyInteresting(string value)
         {
-            return regex.IsMatch(value) && !IsAntiMatching(value);
+            if (string.IsNullOrEmpty(value))
+            {
+                return false;
+            }
+
+            return value.Contains("QCOM", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("MSHW", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("VEN_QCOM&DEV_", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("VEN_MSHW&DEV_", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("VID_045E&PID_0C01", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("VID_045E&PID_0C1D", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains(@"\surface", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains(@"\qc", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("surface", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("oem", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsSimpleAntiMatch(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return false;
+            }
+
+            return value.Contains("qcap", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("qcursext", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("hidspi", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("sdstor", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("sdbus", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("storufs", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("chipidea", StringComparison.OrdinalIgnoreCase)
+                   || value.Contains("synopsys", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsAntiMatching(string value)
         {
-            return antiRegex.IsMatch(value);
-        }
-
-        private static Match GetMatch(string value)
-        {
-            return regex.Match(value);
-        }
-
-        private static void FixDriverStorePathsInRegistryValueForLeftOvers(RegistryKey registryKey, string registryValue)
-        {
-            // TODO:
-            // Key: Microsoft\Windows\CurrentVersion\Setup\PnpResources\Registry\HKLM\ ... \
-            // Val: Owners
-
-            if (registryKey?.GetValueNames().Any(x => x.Equals(registryValue, StringComparison.InvariantCultureIgnoreCase)) == true)
+            if (string.IsNullOrEmpty(value))
             {
-                switch (registryKey.GetValueType(registryValue))
+                return false;
+            }
+
+            if (IsSimpleAntiMatch(value))
+            {
+                return true;
+            }
+
+            return AntiDeviceIdRegex().IsMatch(value) || QcInboxRegex().IsMatch(value);
+        }
+
+        private static bool TryGetMatch(string value, out Match match)
+        {
+            match = Match.Empty;
+            if (!IsLikelyInteresting(value))
+            {
+                return false;
+            }
+
+            if (IsAntiMatching(value))
+            {
+                return false;
+            }
+
+            match = DeviceIdRegex().Match(value);
+            if (match.Success)
+            {
+                return true;
+            }
+
+            match = OemInfRegex().Match(value);
+            if (match.Success)
+            {
+                return true;
+            }
+
+            match = SurfaceDuoRegex().Match(value);
+            return match.Success;
+        }
+
+        #endregion
+
+        private static void FixRegistryValue(RegistryKey registryKey, string registryValue)
+        {
+            if (registryKey == null)
+            {
+                return;
+            }
+
+            switch (registryKey.GetValueType(registryValue))
+            {
+                case RegistryValueType.String:
                 {
-                    case RegistryValueType.String:
+                    string value = registryKey.GetValue(registryValue) as string;
+                    if (value == null)
+                    {
+                        break;
+                    }
+
+                    if (TryGetMatch(value, out Match match))
+                    {
+                        Logging.Log($"Deleting Value (String) {match.Value} in {registryKey.Name}\\{registryValue}");
+                        registryKey.DeleteValue(string.IsNullOrEmpty(registryValue) ? null : registryValue);
+                    }
+
+                    break;
+                }
+
+                case RegistryValueType.ExpandString:
+                {
+                    string value = registryKey.GetValue(registryValue) as string;
+                    if (value == null)
+                    {
+                        break;
+                    }
+
+                    if (TryGetMatch(value, out Match match))
+                    {
+                        Logging.Log($"Deleting Value (Expand String) {match.Value} in {registryKey.Name}\\{registryValue}");
+                        registryKey.DeleteValue(string.IsNullOrEmpty(registryValue) ? null : registryValue);
+                    }
+
+                    break;
+                }
+
+                case RegistryValueType.MultiString:
+                {
+                    string[] values = registryKey.GetValue(registryValue) as string[];
+                    if (values == null)
+                    {
+                        break;
+                    }
+
+                    List<string> remainingValues = new(values.Length);
+
+                    bool updated = false;
+                    foreach (string value in values)
+                    {
+                        if (value == null)
                         {
-                            string og = (string)registryKey.GetValue(registryValue);
-
-                            if (og == null)
-                            {
-                                break;
-                            }
-
-                            if (IsMatching(og))
-                            {
-                                string currentValue = GetMatch(og).Value;
-
-                                Logging.Log($"Deleting Value (String) {currentValue} in {registryKey.Name}\\{registryValue}");
-
-                                if (registryValue == "")
-                                {
-                                    registryValue = null;
-                                }
-
-                                registryKey.DeleteValue(registryValue);
-                            }
-
-                            break;
+                            continue;
                         }
-                    case RegistryValueType.ExpandString:
+
+                        if (TryGetMatch(value, out Match match))
                         {
-                            string og = (string)registryKey.GetValue(registryValue);
-
-                            if (og == null)
-                            {
-                                break;
-                            }
-
-                            if (IsMatching(og))
-                            {
-                                string currentValue = GetMatch(og).Value;
-
-                                Logging.Log($"Deleting Value (Expand String) {currentValue} in {registryKey.Name}\\{registryValue}");
-
-                                if (registryValue == "")
-                                {
-                                    registryValue = null;
-                                }
-
-                                registryKey.DeleteValue(registryValue);
-                            }
-
-                            break;
+                            Logging.Log($"Deleting Value (Multi String) {match.Value} in {registryKey.Name}\\{registryValue}");
+                            updated = true;
                         }
-                    case RegistryValueType.MultiString:
+                        else
                         {
-                            string[] ogvals = (string[])registryKey.GetValue(registryValue);
-
-                            if (ogvals == null)
-                            {
-                                break;
-                            }
-
-                            List<string> newVals = [];
-
-                            bool updated = false;
-
-                            foreach (string og in ogvals)
-                            {
-                                if (og == null)
-                                {
-                                    continue;
-                                }
-
-                                if (IsMatching(og))
-                                {
-                                    string currentValue = GetMatch(og).Value;
-
-                                    Logging.Log($"Deleting Value (Multi String) {currentValue} in {registryKey.Name}\\{registryValue}");
-                                    updated = true;
-                                }
-                                else
-                                {
-                                    newVals.Add(og);
-                                }
-                            }
-
-                            if (updated)
-                            {
-                                if (newVals.Count != 0)
-                                {
-                                    registryKey.SetValue(registryValue, newVals.ToArray(), RegistryValueType.MultiString);
-                                }
-                                else
-                                {
-                                    if (registryValue == "")
-                                    {
-                                        registryValue = null;
-                                    }
-
-                                    registryKey.DeleteValue(registryValue);
-                                }
-                            }
-
-                            break;
+                            remainingValues.Add(value);
                         }
+                    }
+
+                    if (!updated)
+                    {
+                        break;
+                    }
+
+                    if (remainingValues.Count > 0)
+                    {
+                        registryKey.SetValue(registryValue, remainingValues.ToArray(), RegistryValueType.MultiString);
+                    }
+                    else
+                    {
+                        registryKey.DeleteValue(string.IsNullOrEmpty(registryValue) ? null : registryValue);
+                    }
+
+                    break;
                 }
             }
         }
 
         private static void CrawlInRegistryKeyForLeftOvers(RegistryKey registryKey)
         {
-            if (registryKey != null)
+            if (registryKey == null)
             {
-                foreach (string subRegistryValueName in registryKey.GetValueNames())
+                return;
+            }
+
+            foreach (string valueName in registryKey.GetValueNames())
+            {
+                if (string.IsNullOrEmpty(valueName))
                 {
-                    if (subRegistryValueName == null)
-                    {
-                        continue;
-                    }
-
-                    if (IsMatching(subRegistryValueName))
-                    {
-                        Logging.Log($"Deleting Value {registryKey.Name}\\{subRegistryValueName}");
-                        registryKey.DeleteValue(subRegistryValueName);
-
-                        continue;
-                    }
-
-                    if (IsAntiMatching(subRegistryValueName))
-                    {
-                        continue;
-                    }
-
-                    FixDriverStorePathsInRegistryValueForLeftOvers(registryKey, subRegistryValueName);
+                    continue;
                 }
 
-                foreach (string subRegistryKey in registryKey.GetSubKeyNames())
+                if (TryGetMatch(valueName, out _))
                 {
-                    if (subRegistryKey == null)
-                    {
-                        continue;
-                    }
-
-                    if (IsMatching(subRegistryKey))
-                    {
-                        Logging.Log($"Deleting Sub Key Tree {registryKey.Name}\\{subRegistryKey}");
-                        registryKey.DeleteSubKeyTree(subRegistryKey);
-
-                        continue;
-                    }
-
-                    if (IsAntiMatching(subRegistryKey))
-                    {
-                        continue;
-                    }
-
-                    CrawlInRegistryKeyForLeftOvers(registryKey.OpenSubKey(subRegistryKey));
+                    Logging.Log($"Deleting Value {registryKey.Name}\\{valueName}");
+                    registryKey.DeleteValue(valueName);
+                    continue;
                 }
+
+                if (IsAntiMatching(valueName))
+                {
+                    continue;
+                }
+
+                FixRegistryValue(registryKey, valueName);
+            }
+
+            foreach (string subKeyName in registryKey.GetSubKeyNames())
+            {
+                if (string.IsNullOrEmpty(subKeyName))
+                {
+                    continue;
+                }
+
+                if (TryGetMatch(subKeyName, out _))
+                {
+                    Logging.Log($"Deleting Sub Key Tree {registryKey.Name}\\{subKeyName}");
+
+                    registryKey.DeleteSubKeyTree(subKeyName);
+                    continue;
+                }
+
+                if (IsAntiMatching(subKeyName))
+                {
+                    continue;
+                }
+
+                CrawlInRegistryKeyForLeftOvers(registryKey.OpenSubKey(subKeyName));
             }
         }
 
         internal static bool ModifyRegistryForLeftOvers(string systemHivePath, string softwareHivePath)
         {
-            //try
+            try
             {
-                using (RegistryHive hive = new(
-                    File.Open(
-                        systemHivePath,
-                        FileMode.Open,
-                        FileAccess.ReadWrite
-                    ), DiscUtils.Streams.Ownership.Dispose))
+                using (RegistryHive hive = new(File.Open(systemHivePath, FileMode.Open, FileAccess.ReadWrite), DiscUtils.Streams.Ownership.Dispose))
                 {
                     Logging.Log("Processing SYSTEM hive");
 
-                    RegistryKey EnumKey = hive.Root.OpenSubKey("ControlSet001\\Enum");
-                    foreach (string subKey in EnumKey.GetSubKeyNames())
-                    {
-                        if (subKey.Equals("ROOT", StringComparison.InvariantCultureIgnoreCase))
-                        {
-                            continue;
-                        }
+                    RegistryKey enumKey = hive.Root.OpenSubKey(@"ControlSet001\Enum");
 
-                        Logging.Log($"Deleting Sub Key Tree {EnumKey.Name}\\{subKey}");
-                        EnumKey.DeleteSubKeyTree(subKey);
+                    if (enumKey != null)
+                    {
+                        foreach (string subKey in enumKey.GetSubKeyNames())
+                        {
+                            if (subKey.Equals("ROOT", StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            Logging.Log($"Deleting Sub Key Tree {enumKey.Name}\\{subKey}");
+                            enumKey.DeleteSubKeyTree(subKey);
+                        }
                     }
 
                     if (hive.Root.OpenSubKey("HardwareConfig") != null)
                     {
-                        EnumKey.DeleteSubKeyTree("HardwareConfig");
+                        try
+                        {
+                            hive.Root.DeleteSubKeyTree("HardwareConfig");
+                        }
+                        catch
+                        {
+                        }
                     }
 
                     CrawlInRegistryKeyForLeftOvers(hive.Root);
                 }
 
-                using (RegistryHive hive = new(
-                    File.Open(
-                        softwareHivePath,
-                        FileMode.Open,
-                        FileAccess.ReadWrite
-                    ), DiscUtils.Streams.Ownership.Dispose))
+                using (RegistryHive hive = new(File.Open(softwareHivePath, FileMode.Open, FileAccess.ReadWrite), DiscUtils.Streams.Ownership.Dispose))
                 {
                     Logging.Log("Processing SOFTWARE hive");
                     CrawlInRegistryKeyForLeftOvers(hive.Root);
                 }
+
+                return true;
             }
-            //catch
-            //{
-            //    return false;
-            //}
-            return true;
+            catch (Exception ex)
+            {
+                Logging.Log($"Registry cleanup failed: {ex}");
+                return false;
+            }
         }
 
-        [GeneratedRegex("""(.*oem[0-9]+\.inf.*)|(.*(QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_|qcom|mshw|ven_qcom&dev_|ven_mshw&dev_)[0-9A-Fa-f]{4}.*)|(.*VID_045E&PID_0C01.*)|(.*VID_045E&PID_0C1D.*)|(.*surface.*duo.*inf)|(.*\\qc.*)|(.*\\surface.*)|(.*vid_045e&pid_0c01.*)|(.*vid_045e&pid_0c1d.*)""")]
-        private static partial Regex DeviceRegex();
+        [GeneratedRegex(@"oem\d+\.inf", RegexOptions.IgnoreCase)]
+        private static partial Regex OemInfRegex();
 
-        [GeneratedRegex("""(.*(QCOM|qcom)((24[0-9A-Fa-f][0-9A-Fa-f])|(7002)|((FFE|ffe)[0-9A-Fa-f])).*)|(.*qcap.*)|(.*qcursext.*)|(.*hidspi.*)|(.*sdstor.*)|(.*sdbus.*)|(.*storufs.*)|(.*u..chipidea.*)|(.*u..synopsys.*)|(.*qc.*_i\.inf.*)""")]
-        private static partial Regex AntiDeviceRegex();
+        [GeneratedRegex(@"(?:QCOM|MSHW|VEN_QCOM&DEV_|VEN_MSHW&DEV_)[0-9A-F]{4}", RegexOptions.IgnoreCase)]
+        private static partial Regex DeviceIdRegex();
+
+        [GeneratedRegex(@"QCOM(?:24[0-9A-F]{2}|7002|FFE[0-9A-F])", RegexOptions.IgnoreCase)]
+        private static partial Regex AntiDeviceIdRegex();
+
+        [GeneratedRegex(@"surface.*duo.*inf", RegexOptions.IgnoreCase)]
+        private static partial Regex SurfaceDuoRegex();
+
+        [GeneratedRegex(@"qc.*_i\.inf", RegexOptions.IgnoreCase)]
+        private static partial Regex QcInboxRegex();
     }
 }
