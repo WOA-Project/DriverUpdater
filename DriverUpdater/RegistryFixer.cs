@@ -188,56 +188,62 @@ namespace DriverUpdater
             }
         }
 
-        private static void CrawlInRegistryKeyForLeftOvers(RegistryKey registryKey)
+        private static void CrawlInRegistryKeyForLeftOvers(RegistryKey rootKey)
         {
-            if (registryKey == null)
+            if (rootKey == null)
             {
                 return;
             }
 
-            foreach (string valueName in registryKey.GetValueNames())
+            Stack<RegistryKey> stack = new();
+            stack.Push(rootKey);
+            while (stack.Count != 0)
             {
-                if (string.IsNullOrEmpty(valueName))
+                RegistryKey registryKey = stack.Pop();
+
+                //
+                // Values
+                //
+                foreach (string valueName in registryKey.GetValueNames())
                 {
-                    continue;
+                    if (string.IsNullOrEmpty(valueName))
+                    {
+                        continue;
+                    }
+
+                    if (TryGetMatch(valueName, out _))
+                    {
+                        Logging.Log($"Deleting Value {registryKey.Name}\\{valueName}");
+                        registryKey.DeleteValue(valueName);
+                        continue;
+                    }
+
+                    FixRegistryValue(registryKey, valueName);
                 }
 
-                if (TryGetMatch(valueName, out _))
+                //
+                // Keys
+                //
+                foreach (string subKeyName in registryKey.GetSubKeyNames())
                 {
-                    Logging.Log($"Deleting Value {registryKey.Name}\\{valueName}");
-                    registryKey.DeleteValue(valueName);
-                    continue;
+                    if (string.IsNullOrEmpty(subKeyName))
+                    {
+                        continue;
+                    }
+
+                    if (TryGetMatch(subKeyName, out _))
+                    {
+                        Logging.Log($"Deleting Sub Key Tree {registryKey.Name}\\{subKeyName}");
+                        registryKey.DeleteSubKeyTree(subKeyName);
+                        continue;
+                    }
+
+                    RegistryKey child = registryKey.OpenSubKey(subKeyName);
+                    if (child != null)
+                    {
+                        stack.Push(child);
+                    }
                 }
-
-                if (IsAntiMatching(valueName))
-                {
-                    continue;
-                }
-
-                FixRegistryValue(registryKey, valueName);
-            }
-
-            foreach (string subKeyName in registryKey.GetSubKeyNames())
-            {
-                if (string.IsNullOrEmpty(subKeyName))
-                {
-                    continue;
-                }
-
-                if (TryGetMatch(subKeyName, out _))
-                {
-                    Logging.Log($"Deleting Sub Key Tree {registryKey.Name}\\{subKeyName}");
-
-                    registryKey.DeleteSubKeyTree(subKeyName);
-                    continue;
-                }
-
-                if (IsAntiMatching(subKeyName))
-                {
-                    continue;
-                }
-
-                CrawlInRegistryKeyForLeftOvers(registryKey.OpenSubKey(subKeyName));
             }
         }
 
